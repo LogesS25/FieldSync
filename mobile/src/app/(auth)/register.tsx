@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
@@ -30,7 +30,10 @@ export default function RegisterScreen() {
 
   const mutation = useMutation({
     mutationFn: authService.register,
-    onSuccess: (data) => setSession(data.user, data.accessToken, data.refreshToken),
+    onSuccess: (data) => {
+      setSession(data.user, data.accessToken, data.refreshToken);
+      router.replace('/');
+    },
   });
 
   const onSubmit = handleSubmit((values) => mutation.mutate(values));
@@ -103,7 +106,7 @@ export default function RegisterScreen() {
                 key={option.value}
                 onPress={() => onChange(option.value)}
                 className={`rounded-full border px-4 py-2 ${
-                  value === option.value ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+                  value === option.value ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
                 }`}
               >
                 <Text className={value === option.value ? 'text-white' : 'text-slate-700'}>{option.label}</Text>
@@ -122,14 +125,14 @@ export default function RegisterScreen() {
       ) : null}
 
       <Pressable
-        className="mt-4 items-center rounded-lg bg-blue-600 py-3 disabled:opacity-50"
+        className="mt-4 items-center rounded-lg bg-brand-600 py-3 disabled:opacity-50"
         disabled={mutation.isPending}
         onPress={onSubmit}
       >
         <Text className="font-semibold text-white">{mutation.isPending ? 'Creating account…' : 'Register'}</Text>
       </Pressable>
 
-      <Link href="/(auth)/login" className="mt-6 text-center text-blue-600">
+      <Link href="/(auth)/login" className="mt-6 text-center text-brand-600">
         Already have an account? Sign in
       </Link>
     </ScrollView>

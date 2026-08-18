@@ -38,9 +38,11 @@ with other local projects) with database/user/password `fieldsync`.
 ```bash
 cd backend
 cp .env.example .env
-# apply migrations in order
+# apply migrations in order (PowerShell: use `Get-Content file | docker exec -i ...`
+# instead of `<` — PowerShell doesn't support input redirection)
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0001_init_users.up.sql
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0002_refresh_tokens.up.sql
+docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0003_practicum.up.sql
 go run ./cmd/api
 ```
 
@@ -88,6 +90,24 @@ Wi-Fi network. A full `npm start` restart is required after changing `.env`
 The mobile app persists the session in the device's secure storage
 (SecureStore) and automatically refreshes an expired access token once
 before failing a request.
+
+## Practicum & Placement (Phase 3)
+
+Administrator-only management (no Admin UI yet — see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5b
+for how to create an admin user directly in Postgres for local testing):
+
+- `POST /institutions`, `GET /institutions`
+- `POST /agencies`, `GET /agencies`
+- `POST /practicums` — body: `studentId`, `institutionId`, `startDate` (`YYYY-MM-DD`), `endDate?`
+- `POST /placements` — body: `practicumId`, `agencyId`, `startDate`, `endDate?`
+- `POST /supervisor-assignments` — body: `practicumId`, `supervisorId`
+
+Read endpoints the mobile app actually calls:
+
+- `GET /practicums/me` (student) — active practicum, institution, current
+  placement/agency, and assigned supervisors in one response.
+- `GET /students` (faculty/agency supervisor) — assigned students with their
+  institution and current agency.
 
 ## Development
 

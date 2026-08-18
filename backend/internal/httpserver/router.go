@@ -10,9 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/fieldsync/backend/internal/agencies"
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/config"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/institutions"
+	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/users"
 )
 
@@ -35,6 +38,9 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 	authService := auth.NewService(queries, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	auth.NewHandler(authService).RegisterRoutes(r)
 	users.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
+	institutions.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
+	agencies.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
+	practicums.NewHandler(practicums.NewService(queries)).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r
 }

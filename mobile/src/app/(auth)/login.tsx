@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
@@ -23,7 +23,13 @@ export default function LoginScreen() {
 
   const mutation = useMutation({
     mutationFn: (values: LoginFormValues) => authService.login(values.email, values.password),
-    onSuccess: (data) => setSession(data.user, data.accessToken, data.refreshToken),
+    onSuccess: (data) => {
+      setSession(data.user, data.accessToken, data.refreshToken);
+      // Updating the store alone doesn't move the router off the login
+      // screen — route to "/" and let index.tsx's role-based redirect send
+      // the user to the right dashboard from one place.
+      router.replace('/');
+    },
   });
 
   const onSubmit = handleSubmit((values) => mutation.mutate(values));
@@ -80,14 +86,14 @@ export default function LoginScreen() {
       ) : null}
 
       <Pressable
-        className="mt-4 items-center rounded-lg bg-blue-600 py-3 disabled:opacity-50"
+        className="mt-4 items-center rounded-lg bg-brand-600 py-3 disabled:opacity-50"
         disabled={mutation.isPending}
         onPress={onSubmit}
       >
         <Text className="font-semibold text-white">{mutation.isPending ? 'Signing in…' : 'Sign In'}</Text>
       </Pressable>
 
-      <Link href="/(auth)/register" className="mt-6 text-center text-blue-600">
+      <Link href="/(auth)/register" className="mt-6 text-center text-brand-600">
         Don&apos;t have an account? Register
       </Link>
     </View>

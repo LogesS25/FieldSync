@@ -42,6 +42,7 @@ sections:
 | `Practicum` | A student's enrollment period, links Student ↔ Institution |
 | `Placement` | Links a Practicum to an Agency |
 | `SupervisorAssignment` | Links a Faculty/Agency Supervisor to a Student's Practicum — this is the authorization boundary for "assigned students" |
+| _(implementation note)_ | `institution_id`/`agency_id` live directly on `users` (nullable FKs) rather than separate `StudentProfile`/`FacultySupervisorProfile`/`AgencySupervisorProfile` tables as originally sketched — simpler schema, fewer joins, and there are no profile-specific fields yet to justify separate tables. Revisit if/when role-specific fields appear (e.g. agency supervisor qualification credentials, §4.3). |
 | `FieldActivity` | Daily logged field work; has verification status + verifier |
 | `AttendanceRecord` | Attendance entries with verification status |
 | `WeeklyReport` | Aggregated weekly submission; submission state |
@@ -119,6 +120,28 @@ deliberately rather than being inferred from structs.
   this endpoint's exposure/rate-limiting before any real deployment.
 - **Mobile session storage**: SecureStore (device Keychain/Keystore) via a
   Zustand `persist` middleware adapter, not plain AsyncStorage.
+
+## 5b. Practicum & Placement (Phase 3)
+
+- **Who can create institutions/agencies/practicums/placements/supervisor
+  assignments?** Administrator-only (`POST /institutions`, `/agencies`,
+  `/practicums`, `/placements`, `/supervisor-assignments`, all gated by
+  `RequireRole("administrator")`). This matches the requirements (§4.4 —
+  Administrator manages institutions, assigns supervisors) rather than
+  inventing a self-service flow. Since there's no Admin UI until Phase 9,
+  an administrator account has to be inserted directly into Postgres for
+  now (self-registration as `administrator` is blocked — see §5a); the API
+  endpoints are real and tested, just not yet reachable from the mobile app.
+- **Query design leans on Postgres, not Go loops**: `GetPracticumSummaryForStudent`
+  resolves the student's current placement via a `LATERAL` join and
+  aggregates assigned supervisors with `json_agg` — one round trip, no
+  application-side joining. `ListStudentsForSupervisor` similarly resolves
+  each student's current agency via `LATERAL` rather than an N+1 fetch. See
+  `backend/sql/queries/practicums.sql`. This is now the standard pattern for
+  any query that would otherwise require looping over a result set to
+  join/aggregate — see `AGENTS.md`.
+- `GET /practicums/me` (student) and `GET /students` (faculty/agency
+  supervisor) are the read endpoints the mobile app actually uses.
 
 ## 6. Mobile
 
