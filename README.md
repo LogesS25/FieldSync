@@ -16,9 +16,11 @@ docker-compose.yml   Local PostgreSQL for development
 
 ## Prerequisites
 
-- Node.js **>= 20.19.4** (Expo SDK 57 requirement — check with `node --version`)
+- Node.js **>= 20.19.4**
 - Go >= 1.22
 - Docker Desktop (for local PostgreSQL)
+- The mobile app targets **Expo SDK 54** — use a matching Expo Go client
+  version, or `npm start` + press `w` to test in a browser instead.
 
 ## Running locally
 
@@ -36,8 +38,9 @@ with other local projects) with database/user/password `fieldsync`.
 ```bash
 cd backend
 cp .env.example .env
-# apply the initial migration (Phase 1 only creates the `users` table)
+# apply migrations in order
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0001_init_users.up.sql
+docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0002_refresh_tokens.up.sql
 go run ./cmd/api
 ```
 
@@ -63,18 +66,58 @@ npm install
 npm start
 ```
 
-Then press `w` for web, or scan the QR code with Expo Go for a device. The
-login screen shows live API connectivity status (`API status: ok (db:
-connected)`) once the backend and Postgres are running — this is a Phase 1
-verification aid, not a real feature.
+Then press `w` for web, or scan the QR code with Expo Go for a device.
+
+If testing on a physical device, `localhost` in `mobile/.env` won't reach
+your machine — set `EXPO_PUBLIC_API_URL` to your machine's LAN IP instead
+(e.g. `http://192.168.x.x:8090`), and make sure the phone is on the same
+Wi-Fi network. A full `npm start` restart is required after changing `.env`
+(env vars are baked in at bundler start, not hot-reloaded).
+
+## Authentication (Phase 2)
+
+- `POST /auth/register` — self-registration for `student`, `faculty_supervisor`,
+  or `agency_supervisor` roles only. Administrator accounts are provisioned
+  separately once the Phase 9 Admin dashboard exists — see
+  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §8.
+- `POST /auth/login` — returns a short-lived JWT access token (15 min) and an
+  opaque refresh token (30 days, stored hashed, rotated on every use).
+- `POST /auth/refresh` / `POST /auth/logout`
+- `GET /users/me` — requires `Authorization: Bearer <accessToken>`
+
+The mobile app persists the session in the device's secure storage
+(SecureStore) and automatically refreshes an expired access token once
+before failing a request.
 
 ## Development
 
 - `npm run lint` (in `mobile/`) — ESLint via Expo's config
 - `go build ./...` / `gofmt -l .` (in `backend/`) — build and format check
 
+## Testing
+
+Backend tests live next to the code they test (`*_test.go`), split into two kinds:
+
+- **Pure unit tests** (`internal/auth/password_test.go`, `jwt_test.go`,
+  `middleware_test.go`) — no external dependencies, always run.
+- **DB-backed tests** (`service_test.go`, `handler_test.go` in `auth` and
+  `users`) — require the local Postgres container running
+  (`docker compose up -d postgres`). Each test runs inside a transaction
+  that's rolled back in cleanup (`internal/testutil.NewTestQueries`), so
+  tests never leave data behind or need a separate test database. If
+  Postgres isn't reachable, these tests skip (not fail) so `go test ./...`
+  still works for someone who hasn't started it yet.
+
+```bash
+cd backend
+go test ./...          # run everything
+go test ./... -v       # verbose, see each test name
+```
+
+No mobile test suite yet — Phase 2 mobile is thin (forms + navigation
+guards); revisit once there's real business logic to test (Phase 4+).
+
 ## Project phases
 
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §10 for the full roadmap.
-This repository is currently at **Phase 1 — Project Foundation**: scaffolding
-only, no business features yet.
+This repository is currently at **Phase 2 — Authentication & User Foundation**.

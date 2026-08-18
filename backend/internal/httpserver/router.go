@@ -9,9 +9,14 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/fieldsync/backend/internal/auth"
+	"github.com/fieldsync/backend/internal/config"
+	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/users"
 )
 
-func NewRouter(pool *pgxpool.Pool) *gin.Engine {
+func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -25,6 +30,11 @@ func NewRouter(pool *pgxpool.Pool) *gin.Engine {
 	}))
 
 	r.GET("/health", healthHandler(pool))
+
+	queries := sqlcgen.New(pool)
+	authService := auth.NewService(queries, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	auth.NewHandler(authService).RegisterRoutes(r)
+	users.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r
 }

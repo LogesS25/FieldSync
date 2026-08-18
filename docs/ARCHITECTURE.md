@@ -95,10 +95,30 @@ deliberately rather than being inferred from structs.
 
 - **PostgreSQL**, matching the highly relational domain.
 - **Migrations**: plain numbered `.up.sql` / `.down.sql` files in
-  `backend/migrations/`. Phase 1 includes only the `users` table (with a
-  `user_role` enum) to prove the pipeline end-to-end; the full domain schema
-  (institutions, practicums, activities, competencies, etc.) is designed in
-  Phase 2/3 alongside the corresponding business logic, not upfront.
+  `backend/migrations/`. Phase 1 added the `users` table (with a `user_role`
+  enum); Phase 2 added `refresh_tokens`. The full domain schema (institutions,
+  practicums, activities, competencies, etc.) is designed in Phase 3+
+  alongside the corresponding business logic, not upfront.
+
+## 5a. Authentication (Phase 2)
+
+- **Password hashing**: bcrypt.
+- **Access tokens**: JWT (HS256), 15-minute TTL, carries `sub` (user ID) and
+  `role`. Stateless — authorization middleware validates the signature and
+  expiry only, no DB lookup per request.
+- **Refresh tokens**: opaque random tokens, stored **hashed** (SHA-256) in
+  `refresh_tokens`, 30-day TTL. Rotated on every use — refreshing revokes the
+  presented token and issues a new pair, so a leaked refresh token stops
+  working the moment the legitimate client refreshes.
+- **Self-registration** (`POST /auth/register`) is allowed for `student`,
+  `faculty_supervisor`, and `agency_supervisor` only. This was an explicit
+  decision (not specified by the requirements, which imply Administrator-led
+  provisioning — see §8) made to unblock testing before the Phase 9 Admin
+  dashboard exists. `administrator` is hard-excluded from the registerable
+  role set in code (`auth.RegisterableRoles`), not just UI-hidden — revisit
+  this endpoint's exposure/rate-limiting before any real deployment.
+- **Mobile session storage**: SecureStore (device Keychain/Keystore) via a
+  Zustand `persist` middleware adapter, not plain AsyncStorage.
 
 ## 6. Mobile
 

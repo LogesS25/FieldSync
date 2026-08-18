@@ -4,14 +4,18 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	Env         string
+	Port            string
+	DatabaseURL     string
+	Env             string
+	JWTSecret       string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 func Load() (*Config, error) {
@@ -22,13 +26,20 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		Env:         getEnv("APP_ENV", "development"),
+		Port:            getEnv("PORT", "8080"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		Env:             getEnv("APP_ENV", "development"),
+		JWTSecret:       os.Getenv("JWT_SECRET"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 30 * 24 * time.Hour,
 	}
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	if cfg.JWTSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
 	return cfg, nil

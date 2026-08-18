@@ -23,7 +23,7 @@ func main() {
 	}
 	defer pool.Close()
 
-	router := httpserver.NewRouter(pool)
+	router := httpserver.NewRouter(pool, cfg)
 
 	log.Printf("fieldsync api listening on :%s (env=%s)", cfg.Port, cfg.Env)
 	if err := router.Run(":" + cfg.Port); err != nil {
