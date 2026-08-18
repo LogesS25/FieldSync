@@ -1,0 +1,27 @@
+# --- Node / Mobile (Expo) ---
+node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/*.jsbundle
+mobile/ios/
+mobile/android/
+mobile/.env
+mobile/.env.local
+npm-debug.*
+yarn-error.log
+
+# --- Go / Backend ---
+backend/bin/
+backend/tmp/
+backend/*.exe
+backend/*.test
+backend/internal/db/sqlcgen/
+backend/.env
+
+# --- General ---
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
