@@ -43,6 +43,7 @@ cp .env.example .env
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0001_init_users.up.sql
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0002_refresh_tokens.up.sql
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0003_practicum.up.sql
+docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0004_fieldwork.up.sql
 go run ./cmd/api
 ```
 
@@ -108,6 +109,21 @@ Read endpoints the mobile app actually calls:
   placement/agency, and assigned supervisors in one response.
 - `GET /students` (faculty/agency supervisor) — assigned students with their
   institution and current agency.
+
+## Student Fieldwork (Phase 4)
+
+Self-service, student-only, always scoped to the caller's own active
+practicum (never a client-supplied student ID). Records are create + list
+only — no edit/delete — and weekly reports are submitted in one action, not
+drafted; see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5c for why.
+
+- `POST /field-activities`, `GET /field-activities` — body: `activityDate` (`YYYY-MM-DD`), `description`
+- `POST /attendance`, `GET /attendance` — body: `attendanceDate`, `hours` (0–24); one record per date
+- `GET /attendance/summary` — `{ "totalHours": number }`, summed server-side
+- `POST /weekly-reports`, `GET /weekly-reports` — body: `weekStartDate`, `weekEndDate`, `summary`; one report per `weekStartDate`
+
+All return `409 Conflict` if the student has no active practicum, or if the
+date/week is a duplicate.
 
 ## Development
 

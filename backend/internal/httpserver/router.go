@@ -10,16 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/fieldsync/backend/internal/activities"
 	"github.com/fieldsync/backend/internal/agencies"
+	"github.com/fieldsync/backend/internal/attendance"
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/config"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
 	"github.com/fieldsync/backend/internal/institutions"
 	"github.com/fieldsync/backend/internal/practicums"
+	"github.com/fieldsync/backend/internal/reports"
 	"github.com/fieldsync/backend/internal/users"
 )
 
 func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -40,7 +47,12 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 	users.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	institutions.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	agencies.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
-	practicums.NewHandler(practicums.NewService(queries)).RegisterRoutes(r, cfg.JWTSecret)
+
+	practicumsService := practicums.NewService(queries)
+	practicums.NewHandler(practicumsService).RegisterRoutes(r, cfg.JWTSecret)
+	activities.NewHandler(activities.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
+	attendance.NewHandler(attendance.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
+	reports.NewHandler(reports.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r
 }

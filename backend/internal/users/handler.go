@@ -23,10 +23,9 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
 }
 
 func (h *Handler) me(c *gin.Context) {
-	userIDStr, _ := c.Get(auth.ContextUserIDKey)
-	userID, err := db.ParseUUID(userIDStr.(string))
+	userID, err := auth.CurrentUserID(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user in token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 

@@ -16,6 +16,12 @@ RETURNING *;
 -- name: GetPracticumByID :one
 SELECT * FROM practicums WHERE id = $1;
 
+-- name: GetActivePracticumIDForStudent :one
+SELECT id FROM practicums
+WHERE student_id = $1 AND status = 'active'
+ORDER BY start_date DESC
+LIMIT 1;
+
 -- name: SupervisorAssignmentExists :one
 SELECT EXISTS (
     SELECT 1 FROM supervisor_assignments

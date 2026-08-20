@@ -99,3 +99,15 @@ func (s *Service) GetSummaryForStudent(ctx context.Context, studentID pgtype.UUI
 func (s *Service) ListForSupervisor(ctx context.Context, supervisorID pgtype.UUID) ([]sqlcgen.ListStudentsForSupervisorRow, error) {
 	return s.queries.ListStudentsForSupervisor(ctx, supervisorID)
 }
+
+// GetActivePracticumID is used by other Phase 4+ domains (field activities,
+// attendance, weekly reports) to scope a student's self-service writes to
+// their current practicum, without duplicating this lookup in every
+// package.
+func (s *Service) GetActivePracticumID(ctx context.Context, studentID pgtype.UUID) (pgtype.UUID, error) {
+	id, err := s.queries.GetActivePracticumIDForStudent(ctx, studentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgtype.UUID{}, ErrNoActivePracticum
+	}
+	return id, err
+}

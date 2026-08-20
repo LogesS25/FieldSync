@@ -143,6 +143,34 @@ deliberately rather than being inferred from structs.
 - `GET /practicums/me` (student) and `GET /students` (faculty/agency
   supervisor) are the read endpoints the mobile app actually uses.
 
+## 5c. Student Fieldwork (Phase 4)
+
+Two explicit scope decisions, made because the requirements don't specify
+either and inventing an unconfirmed workflow was judged worse than a
+narrower but honest MVP:
+
+- **No edit/delete for field activities or attendance.** Requirements §14
+  Q13 ("Can students edit records after submission?") is an open question.
+  Phase 4 only implements create + list. `verification_status` exists on
+  both tables (defaulting to `pending`) so Phase 5's supervisor verification
+  can build on this schema without another migration, but nothing sets it
+  to `verified`/`rejected` yet.
+- **Weekly reports are submitted in a single action, not drafted.** FR-07
+  only requires "submit weekly reports" — a draft-then-submit state machine
+  isn't specified anywhere. `report_status` still has `submitted`/`reviewed`
+  values so Phase 5 can add the review action without a migration.
+
+Ownership is enforced at the handler level: every write derives the
+student's identity from the JWT (`auth.CurrentUserID`), never from a
+client-supplied ID — a student cannot create a record for another student
+by any input manipulation. Writes require an active practicum
+(`practicums.Service.GetActivePracticumID`); attempting to log
+activity/attendance/reports without one returns `409 Conflict`.
+
+`GET /attendance/summary` computes total field hours with `SUM(...)` in
+Postgres (`internal/attendance` `GetTotalHoursForStudent` query) rather than
+fetching all records and summing in Go — same pattern as §5b.
+
 ## 6. Mobile
 
 - **Expo (managed workflow) + React Native + TypeScript.**

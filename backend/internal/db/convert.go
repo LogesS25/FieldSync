@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -47,4 +48,25 @@ func TextToStringPtr(t pgtype.Text) *string {
 		return nil
 	}
 	return &t.String
+}
+
+// ParseHours converts a float (e.g. from a JSON request body) into
+// pgtype.Numeric via its string representation — pgtype.Numeric doesn't
+// accept a float64 directly, and going through the decimal string form
+// avoids float64 binary-precision surprises for a value that ends up in a
+// NUMERIC(4,2) column anyway.
+func ParseHours(hours float64) (pgtype.Numeric, error) {
+	var n pgtype.Numeric
+	if err := n.Scan(strconv.FormatFloat(hours, 'f', 2, 64)); err != nil {
+		return pgtype.Numeric{}, err
+	}
+	return n, nil
+}
+
+func NumericToFloat64(n pgtype.Numeric) float64 {
+	f, err := n.Float64Value()
+	if err != nil || !f.Valid {
+		return 0
+	}
+	return f.Float64
 }

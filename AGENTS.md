@@ -88,13 +88,36 @@ implementing real functionality is not exempt from this.
   Badge, Avatar, EmptyState, ScreenContainer; `brand`/`accent` color tokens
   in `tailwind.config.js`); backend test suite covers service + handler
   layers including role-mismatch and duplicate-assignment edge cases.
+- **Phase 4 — Student Fieldwork**: `field_activities`, `attendance_records`,
+  `weekly_reports` tables (`verification_status`/`report_status` enums ready
+  for Phase 5 to use, nothing sets them beyond the default yet). Student-only
+  self-service endpoints, always scoped to the caller's own active practicum
+  via `auth.CurrentUserID` — never a client-supplied student ID. Two scope
+  decisions made explicitly (documented in `docs/ARCHITECTURE.md` §5c, not
+  silently assumed): no edit/delete on activities/attendance, and weekly
+  reports submit in one action rather than draft-then-submit. Field-hours
+  total computed via `SUM(...)` in Postgres. Real mobile screens for
+  activities/attendance/reports, plus a couple of shared components
+  (`LabeledInput`, `PrimaryButton`) added to the design system. Two bugs
+  found via manual testing and fixed: login/register weren't navigating away
+  from the login screen after success (store updated but router never
+  moved), and an `administrator` account would have infinite-looped between
+  `/` and the `(supervisor)` group's role guard. **Follow-up after user
+  testing**: the first pass shipped plain text inputs (`YYYY-MM-DD` typed by
+  hand) for every date field — a real design-quality miss against the
+  "immersive, not boring" bar set for Phase 3 onward. Fixed same-day, not
+  deferred: added `components/ui/date-input.tsx` (native picker via
+  `@react-native-community/datetimepicker`, iOS wrapped in a bottom-sheet
+  with Cancel/Done since iOS has no dismissible date-only dialog) +
+  `date-input.web.tsx` (native browser `<input type="date">`, platform file
+  resolved automatically by Metro). Lesson: when a screen has a date field,
+  reach for `DateInput` from the start — a raw text field for a date is not
+  an acceptable placeholder going forward, not even for a first pass.
 
 ### In progress
-_(nothing currently — Phase 3 complete, Phase 4 not yet started)_
+_(nothing currently — Phase 4 complete, Phase 5 not yet started)_
 
 ### Not started
-- Phase 4 — Student Fieldwork (field activities, attendance, field hours,
-  weekly reports)
 - Phase 5 — Supervisor Workflows (review, verification, supervision records,
   feedback, evaluations)
 - Phase 6 — Competency System (framework is an open product decision — do not
@@ -131,8 +154,8 @@ environment" means "safe to expose to real users."
 - **Account lockout / anomalous-login detection**: not implemented.
 - **Password reset ("forgot password")**: does not exist yet. Users who
   forget their password have no recovery path.
-- **`GIN_MODE`**: defaults to debug mode (verbose logging, slower). Must be
-  set to `release` in any deployed environment.
+- ~~**`GIN_MODE`**~~ — **done**: `httpserver.NewRouter` calls
+  `gin.SetMode(gin.ReleaseMode)` automatically when `APP_ENV=production`.
 - **Trusted proxies**: Gin logs a warning about trusting all proxies by
   default — must configure the real proxy chain (or disable) once deployed
   behind a load balancer/reverse proxy.

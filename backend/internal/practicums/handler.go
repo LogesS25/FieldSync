@@ -167,10 +167,9 @@ func (h *Handler) createSupervisorAssignment(c *gin.Context) {
 }
 
 func (h *Handler) getMyPracticum(c *gin.Context) {
-	studentIDStr, _ := c.Get(auth.ContextUserIDKey)
-	studentID, err := db.ParseUUID(studentIDStr.(string))
+	studentID, err := auth.CurrentUserID(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user in token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -205,10 +204,9 @@ func (h *Handler) getMyPracticum(c *gin.Context) {
 }
 
 func (h *Handler) listMyStudents(c *gin.Context) {
-	supervisorIDStr, _ := c.Get(auth.ContextUserIDKey)
-	supervisorID, err := db.ParseUUID(supervisorIDStr.(string))
+	supervisorID, err := auth.CurrentUserID(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user in token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
