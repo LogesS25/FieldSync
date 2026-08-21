@@ -105,3 +105,121 @@ func TestMeHandler_TokenForDeletedUser(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+func tokenFor(t *testing.T, user sqlcgen.User) string {
+	t.Helper()
+	token, err := auth.GenerateAccessToken(testSecret, db.UUIDToString(user.ID), string(user.Role), time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateAccessToken: %v", err)
+	}
+	return token
+}
+
+func TestListMyFacultySupervisors_ScopedToOwnInstitution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	queries := testutil.NewTestQueries(t)
+	r := gin.New()
+	users.NewHandler(queries).RegisterRoutes(r, testSecret)
+	ctx := context.Background()
+
+	institutionA := testutil.CreateTestInstitution(t, queries)
+	institutionB := testutil.CreateTestInstitution(t, queries)
+
+	student, err := queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:         fmt.Sprintf("student-%d@example.com", time.Now().UnixNano()),
+		PasswordHash:  "irrelevant",
+		Role:          sqlcgen.UserRoleStudent,
+		FullName:      "Test Student",
+		InstitutionID: institutionA.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(student): %v", err)
+	}
+	facultyA, err := queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:         fmt.Sprintf("faculty-a-%d@example.com", time.Now().UnixNano()),
+		PasswordHash:  "irrelevant",
+		Role:          sqlcgen.UserRoleFacultySupervisor,
+		FullName:      "Faculty A",
+		InstitutionID: institutionA.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(facultyA): %v", err)
+	}
+	if _, err := queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:         fmt.Sprintf("faculty-b-%d@example.com", time.Now().UnixNano()),
+		PasswordHash:  "irrelevant",
+		Role:          sqlcgen.UserRoleFacultySupervisor,
+		FullName:      "Faculty B",
+		InstitutionID: institutionB.ID,
+	}); err != nil {
+		t.Fatalf("CreateUser(facultyB): %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/faculty-supervisors/mine", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenFor(t, student))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var results []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1 (must not see other university's faculty)", len(results))
+	}
+	if results[0]["id"] != db.UUIDToString(facultyA.ID) {
+		t.Errorf("id = %v, want %v", results[0]["id"], db.UUIDToString(facultyA.ID))
+	}
+}
+
+func TestListAgencySupervisors_ScopedToGivenAgency(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	queries := testutil.NewTestQueries(t)
+	r := gin.New()
+	users.NewHandler(queries).RegisterRoutes(r, testSecret)
+	ctx := context.Background()
+
+	institution := testutil.CreateTestInstitution(t, queries)
+	agencyA := testutil.CreateTestAgency(t, queries, institution.ID)
+	agencyB := testutil.CreateTestAgency(t, queries, institution.ID)
+
+	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+	supA, err := queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:        fmt.Sprintf("sup-a-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "irrelevant",
+		Role:         sqlcgen.UserRoleAgencySupervisor,
+		FullName:     "Sup A",
+		AgencyID:     agencyA.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(supA): %v", err)
+	}
+	if _, err := queries.CreateUser(ctx, sqlcgen.CreateUserParams{
+		Email:        fmt.Sprintf("sup-b-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "irrelevant",
+		Role:         sqlcgen.UserRoleAgencySupervisor,
+		FullName:     "Sup B",
+		AgencyID:     agencyB.ID,
+	}); err != nil {
+		t.Fatalf("CreateUser(supB): %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/agency-supervisors?agencyId="+db.UUIDToString(agencyA.ID), nil)
+	req.Header.Set("Authorization", "Bearer "+tokenFor(t, student))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var results []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(results) != 1 || results[0]["id"] != db.UUIDToString(supA.ID) {
+		t.Fatalf("results = %+v, want exactly agency A's supervisor", results)
+	}
+}

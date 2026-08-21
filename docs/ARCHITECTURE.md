@@ -1,8 +1,20 @@
 # FieldSync — Architecture
 
-Source of truth for product requirements: [`social_work_field_practicum_requirements.md`](../social_work_field_practicum_requirements.md).
-This document does not restate or reinterpret those requirements — it records the
-technical decisions made to implement them, and flags what is still open.
+## Source documents & precedence
+
+- [`social_work_field_practicum_business_requirements.md`](../social_work_field_practicum_business_requirements.md)
+  — **primary business source of truth**, dated to the latest stakeholder
+  discussion (2026-08-20). Authoritative for workflow, roles, and business
+  rules wherever it conflicts with the earlier document below.
+- [`field_sync_requirements.md`](../field_sync_requirements.md) — the
+  original platform/feature-level spec (this repo's very first requirements
+  doc, later renamed from `social_work_field_practicum_requirements.md`).
+  Superseded on workflow specifics where the business requirements doc says
+  something different (see §3a Business Model Change Log below) — still
+  useful for dashboard/module-level language the newer doc doesn't restate.
+
+This document does not restate or reinterpret those requirements — it records
+the technical decisions made to implement them, and flags what is still open.
 
 ## 1. Product phasing
 
@@ -32,33 +44,92 @@ React Native (Expo) ──REST──> Go API (Gin) ──> PostgreSQL
 ## 3. Domain model (derived from requirements, not assumed)
 
 Entities identified from the requirements' stakeholders, modules, and workflow
-sections:
+sections. **Status** reflects the business requirements doc as of
+2026-08-20 — see §3a for what changed and why some rows are marked outdated.
 
-| Entity | Purpose |
-|---|---|
-| `User` | Base identity: email, password hash, role, timestamps |
-| `Institution` | Educational institution a student/faculty belongs to |
-| `Agency` | Field placement organization |
-| `Practicum` | A student's enrollment period, links Student ↔ Institution |
-| `Placement` | Links a Practicum to an Agency |
-| `SupervisorAssignment` | Links a Faculty/Agency Supervisor to a Student's Practicum — this is the authorization boundary for "assigned students" |
-| _(implementation note)_ | `institution_id`/`agency_id` live directly on `users` (nullable FKs) rather than separate `StudentProfile`/`FacultySupervisorProfile`/`AgencySupervisorProfile` tables as originally sketched — simpler schema, fewer joins, and there are no profile-specific fields yet to justify separate tables. Revisit if/when role-specific fields appear (e.g. agency supervisor qualification credentials, §4.3). |
-| `FieldActivity` | Daily logged field work; has verification status + verifier |
-| `AttendanceRecord` | Attendance entries with verification status |
-| `WeeklyReport` | Aggregated weekly submission; submission state |
-| `SupervisionSession` | Recorded supervision meeting |
-| `Evaluation` | Structured score + criteria reference, authored by a supervisor |
-| `Feedback` | Freeform feedback linked to an activity/report/session |
-| `CompetencyFramework` / `CompetencyCriterion` | **Configurable**, not hardcoded — see Open Decisions |
-| `CompetencyScore` | A student's progress against criteria |
-| `Resource` | File metadata (manuals, templates, guidelines); actual bytes in S3 |
-| `Notification` | Directed alert to a specific stakeholder |
-| `Grievance` | Raised by an agency supervisor |
-| `VerificationIssue` | System-detected gap (computed, not directly written by users) |
+| Entity | Purpose | Status |
+|---|---|---|
+| `User` | Base identity: email, password hash, role, timestamps | current |
+| `Institution` (= University) | Institutional partner; owns its own agencies, faculty supervisors, requirement thresholds, manuals | current, scope narrower than needed — see §3a #4 |
+| `Agency` | Field placement organization | **needs migration** — must become university-scoped (`institution_id` FK), currently global — see §3a #4 |
+| `Practicum` | A student's enrollment period, links Student ↔ Institution | current |
+| `Placement` | Links a Practicum to an Agency | current |
+| `SupervisorAssignment` | Links a Faculty/Agency Supervisor to a Student's Practicum — authorization boundary for "assigned students" | current, but now only created once a team request is mutually accepted — see §3a #1 |
+| `PracticumTeamRequest` *(new)* | Student-initiated request naming an agency, a faculty supervisor, and an agency supervisor; each supervisor accepts/rejects independently; forms the `SupervisorAssignment`s + `Placement` once both accept | **not yet built** — see §3a #1 |
+| _(implementation note)_ | `institution_id`/`agency_id` live directly on `users` (nullable FKs) rather than separate `StudentProfile`/`FacultySupervisorProfile`/`AgencySupervisorProfile` tables as originally sketched — simpler schema, fewer joins, and there are no profile-specific fields yet to justify separate tables. Revisit if/when role-specific fields appear (e.g. agency supervisor qualification credentials, §4.3). | current |
+| `FieldActivity` | Free-text daily log, no approval, no file | **superseded** by `DailyReport` — see §3a #3 |
+| `DailyReport` *(new)* | One file-upload ("handwritten report") per day; review workflow TBD | **not yet built** — see §3a #3 |
+| `AttendanceRecord` | Attendance entries with verification status | **needs migration** — must support two sessions/day (morning + evening) with sequential agency→faculty approval, not one record with an unused status column — see §3a #2 |
+| `WeeklyReport` | Unlimited free-text weekly submissions, no approval | **superseded** by `ConsolidatedReport` — see §3a #5 |
+| `ConsolidatedReport` *(new)* | One report per practicum covering the whole fieldwork period; agency review then faculty review, each approve/reject | **not yet built** — see §3a #5 |
+| `SupervisionSession` | Recorded supervision meeting | not yet built (Phase 5) |
+| `Evaluation` | Structured score + criteria reference, authored by a supervisor | not yet built (Phase 6); business doc confirms both supervisors mark independently, combination method is TBD |
+| `Feedback` | Freeform feedback linked to an activity/report/session | not yet built (Phase 5) |
+| `CompetencyFramework` / `CompetencyCriterion` | **Configurable**, not hardcoded — see Open Decisions | not yet built (Phase 6); business doc reframes this as **per-item agency→faculty approval**, not just a score — see §3a #6 |
+| `CompetencyScore` | A student's progress against criteria | not yet built (Phase 6) |
+| `Resource` | File metadata (manuals, templates, guidelines); actual bytes in S3 | not yet built (Phase 7); business doc scopes manuals **per-university**, not global |
+| `PracticumRequirement` *(new)* | University-configurable thresholds (e.g. minimum attendance %) checked automatically against a student's approved records | **not yet built** — see §3a #7 |
+| `Notification` | Directed alert to a specific stakeholder | not yet built (Phase 7); now also required for team-request accept/reject, not just monitoring alerts |
+| `Grievance` | Raised by an agency supervisor | absent from the latest business requirements doc — not confirmed removed, just not restated. Treat as still-open, don't build or drop without asking. |
+| `VerificationIssue` | System-detected gap (computed, not directly written by users) | not yet built (Phase 8) |
 
 Authorization is enforced by walking these relationships (e.g., a Faculty
 Supervisor may only act on a Student reachable via their
 `SupervisorAssignment` rows), not by a flat permissions table.
+
+## 3a. Business Model Change Log — 2026-08-20
+
+The business requirements document (dated to the latest stakeholder
+discussion) replaced significant parts of the workflow this project had
+already implemented under the earlier, vaguer requirements doc. Recorded
+here so nobody mistakes Phase 3/4 as-built for a still-accurate spec.
+
+1. **Supervisor assignment is student-initiated with accept/reject, not
+   admin-assigned.** Old: an administrator unilaterally created a
+   `SupervisorAssignment` (`POST /supervisor-assignments`). New: the student
+   selects an agency, "fieldwork," a faculty supervisor, and an agency
+   supervisor; both supervisors are notified and accept/reject
+   independently; the "practicum team" forms only once both accept. Whether
+   both accepting is a hard requirement is itself listed as an open
+   stakeholder question (business doc §21 Q5) — implement the request/accept
+   flow as the default per the documented diagram, but keep it easy to
+   relax.
+2. **Attendance is twice-daily with sequential two-step approval.** Old: one
+   `attendance_records` row per date, `verification_status` column present
+   but no verify endpoint existed. New: separate morning and evening
+   records, each requiring Agency Supervisor approval **then** Faculty
+   Supervisor approval (sequential, not independent) before it counts.
+   Exact hours-from-attendance calculation is explicitly TBD (business doc
+   §15) — do not compute or display an authoritative "total field hours"
+   number until the university provides that rule.
+3. **The daily record is a file upload, not free text.** "Daily Handwritten
+   Report" (business doc §10) is an uploaded scan/photo per day. This is not
+   what `FieldActivity` (Phase 4) implemented. Building this requires a real
+   file storage backend (Phase 7 was going to add this later) — pulled
+   forward as a dependency.
+4. **Agencies and requirement thresholds are university-scoped, not
+   global.** A university uploads/owns its own agency list, faculty
+   supervisor list, and configurable basic-requirement thresholds (e.g.
+   minimum attendance %, explicitly **not** a fixed value like 75/80/85% —
+   business doc §16 is emphatic about this). `agencies` currently has no
+   `institution_id`.
+5. **Weekly reports are replaced by a single "Consolidated Report" per
+   practicum period**, reviewed by agency then faculty (approve/reject
+   each), not unlimited free-text weekly submissions with no review.
+6. **Competency/fieldwork requirements are approval-gated per item**
+   (student checks a requirement → agency approve/reject → faculty
+   approve/reject), closer to a workflow than the "framework + score" model
+   originally planned for Phase 6.
+7. **Automatic requirement checking is university-configurable**, checking
+   attendance %, hours, competency completion, and reports against
+   per-university thresholds — this is the old "Monitoring & Verification"
+   idea (Phase 8), but now explicitly tied to per-university config rather
+   than a fixed platform-wide rule.
+
+**What this means practically**: Phase 3's supervisor-assignment flow and
+Phase 4's attendance/field-activity/weekly-report flow are being reworked
+before any further phase builds on top of them. See the project status in
+`AGENTS.md` for what's actually in progress.
 
 ## 4. Backend
 

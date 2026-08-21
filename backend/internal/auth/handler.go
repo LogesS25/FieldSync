@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
@@ -26,10 +27,12 @@ func (h *Handler) RegisterRoutes(r gin.IRouter) {
 }
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
-	FullName string `json:"fullName" binding:"required"`
-	Role     string `json:"role" binding:"required"`
+	Email         string `json:"email" binding:"required,email"`
+	Password      string `json:"password" binding:"required,min=8"`
+	FullName      string `json:"fullName" binding:"required"`
+	Role          string `json:"role" binding:"required"`
+	InstitutionID string `json:"institutionId" binding:"omitempty,uuid"`
+	AgencyID      string `json:"agencyId" binding:"omitempty,uuid"`
 }
 
 func (h *Handler) register(c *gin.Context) {
@@ -45,13 +48,42 @@ func (h *Handler) register(c *gin.Context) {
 		return
 	}
 
-	session, err := h.service.Register(c.Request.Context(), req.Email, req.Password, req.FullName, role)
-	if err != nil {
-		if errors.Is(err, ErrEmailTaken) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	var institutionID, agencyID pgtype.UUID
+	if req.InstitutionID != "" {
+		var err error
+		institutionID, err = db.ParseUUID(req.InstitutionID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid institutionId"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not register user"})
+	}
+	if req.AgencyID != "" {
+		var err error
+		agencyID, err = db.ParseUUID(req.AgencyID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agencyId"})
+			return
+		}
+	}
+
+	session, err := h.service.Register(c.Request.Context(), RegisterInput{
+		Email:         req.Email,
+		Password:      req.Password,
+		FullName:      req.FullName,
+		Role:          role,
+		InstitutionID: institutionID,
+		AgencyID:      agencyID,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEmailTaken):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, ErrInstitutionRequired), errors.Is(err, ErrAgencyRequired),
+			errors.Is(err, ErrInstitutionNotFound), errors.Is(err, ErrAgencyNotFound):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not register user"})
+		}
 		return
 	}
 
@@ -119,10 +151,12 @@ func sessionResponse(session Session) gin.H {
 		"accessToken":  session.AccessToken,
 		"refreshToken": session.RefreshToken,
 		"user": gin.H{
-			"id":       db.UUIDToString(session.User.ID),
-			"email":    session.User.Email,
-			"fullName": session.User.FullName,
-			"role":     session.User.Role,
+			"id":            db.UUIDToString(session.User.ID),
+			"email":         session.User.Email,
+			"fullName":      session.User.FullName,
+			"role":          session.User.Role,
+			"institutionId": db.UUIDToStringPtr(session.User.InstitutionID),
+			"agencyId":      db.UUIDToStringPtr(session.User.AgencyID),
 		},
 	}
 }

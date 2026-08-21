@@ -1,10 +1,19 @@
 # AGENTS.md — FieldSync
 
 Instructions for any agent (or human) working on this repo. Read this before
-making changes. Product requirements live in
-[`social_work_field_practicum_requirements.md`](./social_work_field_practicum_requirements.md);
-architecture and technical decisions live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+making changes. Business requirements (**primary source of truth** — latest
+stakeholder discussion, 2026-08-20) live in
+[`social_work_field_practicum_business_requirements.md`](./social_work_field_practicum_business_requirements.md).
+The original platform spec, [`field_sync_requirements.md`](./field_sync_requirements.md),
+is superseded on workflow specifics where the two conflict — see
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §3a for exactly what changed.
+Architecture and technical decisions live in [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 This file is about *how* to work in the repo, not *what* the product is.
+
+**Before implementing anything in Phase 3/4/5 territory (supervisor
+assignment, attendance, daily reports, consolidated reports, competency
+approval, requirement thresholds), read `docs/ARCHITECTURE.md` §3a first** —
+that's exactly the area the business requirements doc changed.
 
 ---
 
@@ -114,10 +123,74 @@ implementing real functionality is not exempt from this.
   reach for `DateInput` from the start — a raw text field for a date is not
   an acceptable placeholder going forward, not even for a first pass.
 
+- **Business Model Rework (2026-08-20/21)** — done, see `docs/ARCHITECTURE.md`
+  §3a for the full change log this implements. Migration `0005`:
+  - `agencies` gained `institution_id` (NOT NULL) — agencies are now
+    university-scoped, not global. `GET /agencies/mine`,
+    `GET /public/agencies` added.
+  - New `practicum_team_requests` table + `internal/teamrequests` package:
+    student picks agency/faculty supervisor/agency supervisor, each responds
+    independently (`POST /team-requests`, `/team-requests/me`,
+    `/team-requests/pending`, `/team-requests/:id/respond`); the practicum
+    team (`Practicum`+`Placement`+both `SupervisorAssignment`s) forms
+    automatically the moment both accept. The old admin-unilateral
+    `POST /practicums` / `/placements` / `/supervisor-assignments` HTTP
+    routes were removed (the underlying `practicums.Service` methods remain,
+    now called internally by `teamrequests`).
+  - `attendance_records` reworked: added `session` (`morning`/`evening`,
+    unique per date+session, replacing one-record-per-day), and
+    `agency_status`/`faculty_status` review columns replacing the unused
+    single `verification_status`. Faculty review is rejected with `409` if
+    attempted before agency approval (`ErrAgencyReviewFirst`) — sequential,
+    not independent. `hours_logged` became optional; the old
+    `/attendance/summary` total-hours endpoint was **removed entirely**,
+    not just hidden — hours-to-total calculation is explicitly TBD in the
+    business doc and computing one would have been inventing a business
+    rule.
+  - `weekly_reports` **dropped**, replaced by `consolidated_reports`: one row
+    per practicum (`UNIQUE(practicum_id)`), same agency-then-faculty
+    sequential review pattern as attendance.
+  - Registration now requires `institutionId` (student/faculty_supervisor)
+    or `agencyId` (agency_supervisor) — previously nothing set
+    `users.institution_id`/`agency_id` at all, which would have made the
+    team-request flow unreachable for any freshly-registered user. Added
+    `GET /public/institutions`, `GET /public/agencies` (unauthenticated, for
+    the registration picker) and `GET /faculty-supervisors/mine`,
+    `GET /agency-supervisors?agencyId=` (for the team-request picker).
+  - Full backend test coverage for all of the above (new tests in
+    `agencies`, `attendance`, `reports`, `teamrequests`, `users`; existing
+    `auth`/`practicums` tests updated for the new required registration
+    fields). Verified live end-to-end via curl: full team formation, faculty
+    review before agency approval correctly rejected, sequential
+    attendance and consolidated-report approval, duplicate-report rejection.
+  - Mobile: registration screen gained university/agency pickers (was a hard
+    regression otherwise — registration would always fail without them);
+    new student "Team" screen (`(student)/supervision.tsx`) for creating and
+    tracking team requests; reworked attendance screen (session picker, no
+    more fake total-hours card) and reports screen (single consolidated
+    report, not a list); new supervisor screens for team-request
+    accept/reject, attendance review, and consolidated-report review
+    (`(supervisor)/supervision.tsx`, `attendance.tsx`, `evaluations.tsx`).
+    `PrimaryButton` gained a `variant` prop (`brand`/`danger`/`neutral`) so
+    Accept and Reject don't look identical.
+  - **Explicitly deferred, not started**: `FieldActivity` → `DailyReport`
+    (business doc's "daily handwritten report" is a file upload, not free
+    text) — needs a real file storage backend first (local disk for dev;
+    was Phase 7 scope), pulled forward as a dependency but not yet built.
+    `field_activities`/`GET /field-activities` still work exactly as
+    before (Phase 4 semantics), they just don't yet match the business
+    doc's file-upload requirement.
+
 ### In progress
-_(nothing currently — Phase 4 complete, Phase 5 not yet started)_
+_(nothing currently — rework complete, Phase 5 not yet started)_
 
 ### Not started
+- **Daily Report file upload** (deferred from the rework above — see Done).
+  Needs: local-disk `storage.Storage` implementation, multipart upload
+  endpoint, mobile image picker (`expo-image-picker` or
+  `expo-document-picker`) + upload screen. Do this before or alongside
+  Phase 5, since Phase 5's "review daily records" workflow logically
+  includes reviewing these once they exist.
 - Phase 5 — Supervisor Workflows (review, verification, supervision records,
   feedback, evaluations)
 - Phase 6 — Competency System (framework is an open product decision — do not

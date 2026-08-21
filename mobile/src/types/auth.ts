@@ -5,6 +5,8 @@ export interface AuthUser {
   email: string;
   fullName: string;
   role: UserRole;
+  institutionId: string | null;
+  agencyId: string | null;
 }
 
 export interface AuthTokens {

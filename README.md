@@ -2,7 +2,8 @@
 
 A role-based digital platform for standardization and competency-based management of social work field work practicum.
 
-Product requirements: [`social_work_field_practicum_requirements.md`](./social_work_field_practicum_requirements.md)
+Business requirements (primary source of truth): [`social_work_field_practicum_business_requirements.md`](./social_work_field_practicum_business_requirements.md)
+Original platform spec (superseded on workflow specifics — see ARCHITECTURE.md §3a): [`field_sync_requirements.md`](./field_sync_requirements.md)
 Architecture and technical decisions: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
 
 ## Repository layout
@@ -44,6 +45,7 @@ docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/00
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0002_refresh_tokens.up.sql
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0003_practicum.up.sql
 docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0004_fieldwork.up.sql
+docker exec -i fieldsync-postgres psql -U fieldsync -d fieldsync < migrations/0005_business_model_rework.up.sql
 go run ./cmd/api
 ```
 
@@ -77,53 +79,90 @@ your machine — set `EXPO_PUBLIC_API_URL` to your machine's LAN IP instead
 Wi-Fi network. A full `npm start` restart is required after changing `.env`
 (env vars are baked in at bundler start, not hot-reloaded).
 
-## Authentication (Phase 2)
+## Authentication
 
 - `POST /auth/register` — self-registration for `student`, `faculty_supervisor`,
   or `agency_supervisor` roles only. Administrator accounts are provisioned
   separately once the Phase 9 Admin dashboard exists — see
-  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §8.
+  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §8. Requires `institutionId`
+  (student/faculty) or `agencyId` (agency supervisor) — every stakeholder is
+  tied to a university, directly or via their agency.
 - `POST /auth/login` — returns a short-lived JWT access token (15 min) and an
   opaque refresh token (30 days, stored hashed, rotated on every use).
 - `POST /auth/refresh` / `POST /auth/logout`
 - `GET /users/me` — requires `Authorization: Bearer <accessToken>`
+- `GET /public/institutions`, `GET /public/agencies` — unauthenticated, for
+  the registration screen's university/agency picker.
 
 The mobile app persists the session in the device's secure storage
 (SecureStore) and automatically refreshes an expired access token once
 before failing a request.
 
-## Practicum & Placement (Phase 3)
+## Universities & Agencies
 
 Administrator-only management (no Admin UI yet — see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5b
-for how to create an admin user directly in Postgres for local testing):
+for how to create an admin user directly in Postgres for local testing).
+Agencies are university-scoped (`institutionId` required).
 
 - `POST /institutions`, `GET /institutions`
-- `POST /agencies`, `GET /agencies`
-- `POST /practicums` — body: `studentId`, `institutionId`, `startDate` (`YYYY-MM-DD`), `endDate?`
-- `POST /placements` — body: `practicumId`, `agencyId`, `startDate`, `endDate?`
-- `POST /supervisor-assignments` — body: `practicumId`, `supervisorId`
+- `POST /agencies` — body: `name`, `institutionId`; `GET /agencies`
+- `GET /agencies/mine` — agencies within the caller's own university.
+- `GET /faculty-supervisors/mine` (student) — faculty supervisors within the
+  caller's own university.
+- `GET /agency-supervisors?agencyId=` — agency supervisors at a given agency.
 
-Read endpoints the mobile app actually calls:
+## Practicum Team Formation
+
+Student-initiated, mutual accept/reject — replaces the earlier
+admin-unilateral assignment flow entirely (see
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §3a #1). The
+`Practicum`/`Placement`/`SupervisorAssignment` rows form automatically once
+both supervisors accept.
+
+- `POST /team-requests` (student) — body: `agencyId`, `facultySupervisorId`,
+  `agencySupervisorId`, `fieldworkDescription`, `startDate`
+- `GET /team-requests/me` (student) — the student's own requests
+- `GET /team-requests/pending` (faculty/agency supervisor) — requests naming
+  the caller, awaiting their decision
+- `POST /team-requests/:id/respond` (faculty/agency supervisor) — body:
+  `{ "decision": "accepted" | "rejected" }`
+
+Once formed:
 
 - `GET /practicums/me` (student) — active practicum, institution, current
   placement/agency, and assigned supervisors in one response.
 - `GET /students` (faculty/agency supervisor) — assigned students with their
   institution and current agency.
 
-## Student Fieldwork (Phase 4)
+## Student Fieldwork
 
 Self-service, student-only, always scoped to the caller's own active
-practicum (never a client-supplied student ID). Records are create + list
-only — no edit/delete — and weekly reports are submitted in one action, not
-drafted; see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5c for why.
+practicum (never a client-supplied student ID). Requires a formed practicum
+team, or returns `409 Conflict`.
 
-- `POST /field-activities`, `GET /field-activities` — body: `activityDate` (`YYYY-MM-DD`), `description`
-- `POST /attendance`, `GET /attendance` — body: `attendanceDate`, `hours` (0–24); one record per date
-- `GET /attendance/summary` — `{ "totalHours": number }`, summed server-side
-- `POST /weekly-reports`, `GET /weekly-reports` — body: `weekStartDate`, `weekEndDate`, `summary`; one report per `weekStartDate`
-
-All return `409 Conflict` if the student has no active practicum, or if the
-date/week is a duplicate.
+- `POST /field-activities`, `GET /field-activities` — body: `activityDate`
+  (`YYYY-MM-DD`), `description`. Free-text daily log — no edit/delete (see
+  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5c). Note: this does
+  **not** yet match the business requirements' "daily handwritten report"
+  (a file upload) — that rework is a separate, not-yet-started pass (needs
+  real file storage — see `AGENTS.md`).
+- `POST /attendance` — body: `attendanceDate`, `session` (`"morning"` |
+  `"evening"`), `hours?` (0–24, optional — hours-to-total calculation is
+  explicitly TBD, not computed here). One record per (date, session).
+- `GET /attendance` (student) / `GET /attendance/pending` (assigned
+  supervisor) — the latter only shows records ready for *that* supervisor:
+  agency supervisors see agency-pending records, faculty supervisors only
+  see records the agency has already approved.
+- `POST /attendance/:id/agency-review`, `POST /attendance/:id/faculty-review`
+  — body: `{ "decision": "approved" | "rejected" }`. Faculty review before
+  agency approval returns `409 Conflict` (sequential, not independent).
+- `POST /consolidated-reports` (student) — body: `summary`. One per
+  practicum (`409 Conflict` on a second submission).
+- `GET /consolidated-reports/me` (student), `GET /consolidated-reports/pending`
+  (supervisor, same agency-then-faculty visibility rule as attendance)
+- `POST /consolidated-reports/:id/agency-review`,
+  `POST /consolidated-reports/:id/faculty-review` — same sequential rule as
+  attendance review.
 
 ## Development
 
@@ -136,8 +175,8 @@ Backend tests live next to the code they test (`*_test.go`), split into two kind
 
 - **Pure unit tests** (`internal/auth/password_test.go`, `jwt_test.go`,
   `middleware_test.go`) — no external dependencies, always run.
-- **DB-backed tests** (`service_test.go`, `handler_test.go` in `auth` and
-  `users`) — require the local Postgres container running
+- **DB-backed tests** (`service_test.go`, `handler_test.go` in every domain
+  package) — require the local Postgres container running
   (`docker compose up -d postgres`). Each test runs inside a transaction
   that's rolled back in cleanup (`internal/testutil.NewTestQueries`), so
   tests never leave data behind or need a separate test database. If
@@ -150,10 +189,14 @@ go test ./...          # run everything
 go test ./... -v       # verbose, see each test name
 ```
 
-No mobile test suite yet — Phase 2 mobile is thin (forms + navigation
-guards); revisit once there's real business logic to test (Phase 4+).
+No mobile test suite yet — revisit once there's mobile-side logic complex
+enough to be worth testing beyond typecheck/lint/manual verification.
 
 ## Project phases
 
-See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §10 for the full roadmap.
-This repository is currently at **Phase 2 — Authentication & User Foundation**.
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §10 for the original
+phase roadmap and §3a for the 2026-08-20 business-model rework that changed
+Phase 3 (supervisor assignment → student-initiated team requests) and
+Phase 4 (attendance/reports) — both now match the updated business
+requirements. See `AGENTS.md` for current status and what's still deferred
+(file-upload daily reports).

@@ -8,7 +8,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { LogoutButton } from '@/components/logout-button';
 import { ApiError } from '@/lib/api-client';
-import * as attendanceService from '@/services/attendance';
 import * as practicumService from '@/services/practicums';
 import { useAuthStore } from '@/stores/auth-store';
 import type { PracticumStatus } from '@/types/practicum';
@@ -34,12 +33,6 @@ export default function StudentDashboard() {
     retry: (failureCount, err) => !(err instanceof ApiError && err.status === 404) && failureCount < 1,
   });
 
-  const { data: hoursSummary } = useQuery({
-    queryKey: ['attendance', 'summary'],
-    queryFn: attendanceService.getAttendanceSummary,
-    enabled: !!data,
-  });
-
   const hasNoPracticum = error instanceof ApiError && error.status === 404;
 
   return (
@@ -54,15 +47,9 @@ export default function StudentDashboard() {
       ) : hasNoPracticum ? (
         <EmptyState
           title="No active practicum yet"
-          description="Once your institution sets up your placement, it will show up here."
+          description="Send a team request from the Team tab once you've picked an agency and supervisors."
         />
       ) : data ? (
-        <>
-          <Card className="mb-6 flex-row items-baseline justify-between bg-brand-600">
-            <Text className="text-sm font-medium text-brand-100">Total Field Hours</Text>
-            <Text className="text-2xl font-bold text-white">{hoursSummary ? hoursSummary.totalHours : '—'}</Text>
-          </Card>
-
         <Card>
           <View className="mb-4 flex-row items-center justify-between">
             <Text className="text-lg font-semibold text-slate-900">Your Practicum</Text>
@@ -94,8 +81,7 @@ export default function StudentDashboard() {
               </View>
             </View>
           ) : null}
-          </Card>
-        </>
+        </Card>
       ) : null}
 
       <View className="mt-8 items-start">

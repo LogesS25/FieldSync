@@ -11,24 +11,27 @@ export const fieldActivitySchema = z.object({
 });
 export type FieldActivityFormValues = z.infer<typeof fieldActivitySchema>;
 
-// `hours` stays a string at the form-state layer (TextInput only ever
-// produces strings) and is parsed to a number at submit time — using
-// z.coerce here would type the RHF field as `number` while the actual
-// runtime value during editing is a string, which trips up
-// @hookform/resolvers' generic inference.
 export const attendanceSchema = z.object({
   attendanceDate: isoDate,
+  session: z.enum(['morning', 'evening']),
   hours: z
     .string()
-    .min(1, 'Hours is required')
-    .refine((v) => !Number.isNaN(Number(v)), 'Must be a number')
-    .refine((v) => Number(v) > 0 && Number(v) <= 24, 'Must be between 0 and 24'),
+    .optional()
+    .refine((v) => !v || !Number.isNaN(Number(v)), 'Must be a number')
+    .refine((v) => !v || (Number(v) > 0 && Number(v) <= 24), 'Must be between 0 and 24'),
 });
 export type AttendanceFormValues = z.infer<typeof attendanceSchema>;
 
-export const weeklyReportSchema = z.object({
-  weekStartDate: isoDate,
-  weekEndDate: isoDate,
+export const consolidatedReportSchema = z.object({
   summary: z.string().min(1, 'Summary is required'),
 });
-export type WeeklyReportFormValues = z.infer<typeof weeklyReportSchema>;
+export type ConsolidatedReportFormValues = z.infer<typeof consolidatedReportSchema>;
+
+export const teamRequestSchema = z.object({
+  agencyId: z.string().min(1, 'Select an agency'),
+  facultySupervisorId: z.string().min(1, 'Select a faculty supervisor'),
+  agencySupervisorId: z.string().min(1, 'Select an agency supervisor'),
+  fieldworkDescription: z.string().min(1, 'Describe the fieldwork'),
+  startDate: isoDate,
+});
+export type TeamRequestFormValues = z.infer<typeof teamRequestSchema>;

@@ -23,89 +23,142 @@ func parseDate(t *testing.T, s string) pgtype.Date {
 	return d
 }
 
-func newTestSetup(t *testing.T) (*reports.Service, *practicums.Service, *sqlcgen.Queries) {
+type testFixture struct {
+	svc          *reports.Service
+	queries      *sqlcgen.Queries
+	student      sqlcgen.User
+	faculty      sqlcgen.User
+	agencySup    sqlcgen.User
+	otherFaculty sqlcgen.User
+}
+
+func newFixture(t *testing.T) testFixture {
 	t.Helper()
 	queries := testutil.NewTestQueries(t)
-	practicumsService := practicums.NewService(queries)
-	return reports.NewService(queries, practicumsService), practicumsService, queries
+	practicumsSvc := practicums.NewService(queries)
+	ctx := context.Background()
+
+	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+	institution := testutil.CreateTestInstitution(t, queries)
+	practicum, err := practicumsSvc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{})
+	if err != nil {
+		t.Fatalf("CreatePracticum: %v", err)
+	}
+
+	faculty := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleFacultySupervisor)
+	agencySup := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleAgencySupervisor)
+	otherFaculty := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleFacultySupervisor)
+
+	if _, err := practicumsSvc.CreateSupervisorAssignment(ctx, practicum.ID, faculty.ID); err != nil {
+		t.Fatalf("assign faculty: %v", err)
+	}
+	if _, err := practicumsSvc.CreateSupervisorAssignment(ctx, practicum.ID, agencySup.ID); err != nil {
+		t.Fatalf("assign agency supervisor: %v", err)
+	}
+
+	return testFixture{
+		svc:          reports.NewService(queries, practicumsSvc),
+		queries:      queries,
+		student:      student,
+		faculty:      faculty,
+		agencySup:    agencySup,
+		otherFaculty: otherFaculty,
+	}
 }
 
 func TestSubmit_Success(t *testing.T) {
-	svc, practicumsSvc, queries := newTestSetup(t)
-	ctx := context.Background()
+	f := newFixture(t)
 
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	if _, err := practicumsSvc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
-
-	report, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-05"), parseDate(t, "2026-01-11"), "Completed intake training.")
+	report, err := f.svc.Submit(context.Background(), f.student.ID, "Completed the full fieldwork period.")
 	if err != nil {
 		t.Fatalf("Submit returned error: %v", err)
 	}
-	if report.Status != sqlcgen.ReportStatusSubmitted {
-		t.Errorf("Status = %v, want submitted", report.Status)
+	if report.AgencyStatus != sqlcgen.ReviewDecisionPending || report.FacultyStatus != sqlcgen.ReviewDecisionPending {
+		t.Errorf("expected both statuses pending, got agency=%v faculty=%v", report.AgencyStatus, report.FacultyStatus)
 	}
 }
 
-func TestSubmit_DuplicateWeekRejected(t *testing.T) {
-	svc, practicumsSvc, queries := newTestSetup(t)
+func TestSubmit_SecondReportForSamePracticumRejected(t *testing.T) {
+	f := newFixture(t)
 	ctx := context.Background()
 
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	if _, err := practicumsSvc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
-
-	if _, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-05"), parseDate(t, "2026-01-11"), "First submission."); err != nil {
+	if _, err := f.svc.Submit(ctx, f.student.ID, "First."); err != nil {
 		t.Fatalf("first Submit returned error: %v", err)
 	}
-
-	_, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-05"), parseDate(t, "2026-01-11"), "Duplicate week.")
+	_, err := f.svc.Submit(ctx, f.student.ID, "Second.")
 	if err == nil {
-		t.Fatal("expected an error for a duplicate week_start_date, got nil")
+		t.Fatal("expected an error submitting a second consolidated report for the same practicum, got nil")
 	}
 }
 
 func TestSubmit_NoActivePracticum(t *testing.T) {
-	svc, _, queries := newTestSetup(t)
-	ctx := context.Background()
-
+	queries := testutil.NewTestQueries(t)
+	svc := reports.NewService(queries, practicums.NewService(queries))
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 
-	_, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-05"), parseDate(t, "2026-01-11"), "No practicum yet.")
+	_, err := svc.Submit(context.Background(), student.ID, "No practicum yet.")
 	if !errors.Is(err, practicums.ErrNoActivePracticum) {
 		t.Fatalf("error = %v, want ErrNoActivePracticum", err)
 	}
 }
 
-func TestListForStudent_OrderedByMostRecentWeek(t *testing.T) {
-	svc, practicumsSvc, queries := newTestSetup(t)
+func TestFacultyReview_RejectedBeforeAgencyApproval(t *testing.T) {
+	f := newFixture(t)
 	ctx := context.Background()
 
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	if _, err := practicumsSvc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
-
-	if _, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-05"), parseDate(t, "2026-01-11"), "Week 1"); err != nil {
-		t.Fatalf("Submit(week 1) returned error: %v", err)
-	}
-	if _, err := svc.Submit(ctx, student.ID, parseDate(t, "2026-01-12"), parseDate(t, "2026-01-18"), "Week 2"); err != nil {
-		t.Fatalf("Submit(week 2) returned error: %v", err)
-	}
-
-	list, err := svc.ListForStudent(ctx, student.ID)
+	report, err := f.svc.Submit(ctx, f.student.ID, "Ready for review.")
 	if err != nil {
-		t.Fatalf("ListForStudent returned error: %v", err)
+		t.Fatalf("Submit returned error: %v", err)
 	}
-	if len(list) != 2 {
-		t.Fatalf("len(list) = %d, want 2", len(list))
+
+	_, err = f.svc.FacultyReview(ctx, report.ID, f.faculty.ID, true)
+	if !errors.Is(err, reports.ErrAgencyReviewFirst) {
+		t.Fatalf("error = %v, want ErrAgencyReviewFirst", err)
 	}
-	if list[0].Summary != "Week 2" {
-		t.Errorf("list[0].Summary = %q, want most recent week first", list[0].Summary)
+}
+
+func TestSequentialApproval_AgencyThenFaculty(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	report, err := f.svc.Submit(ctx, f.student.ID, "Ready for review.")
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	if _, err := f.svc.AgencyReview(ctx, report.ID, f.agencySup.ID, true); err != nil {
+		t.Fatalf("AgencyReview returned error: %v", err)
+	}
+
+	afterFaculty, err := f.svc.FacultyReview(ctx, report.ID, f.faculty.ID, true)
+	if err != nil {
+		t.Fatalf("FacultyReview returned error: %v", err)
+	}
+	if afterFaculty.FacultyStatus != sqlcgen.ReviewDecisionApproved {
+		t.Errorf("FacultyStatus = %v, want approved", afterFaculty.FacultyStatus)
+	}
+}
+
+func TestAgencyReview_RejectsUnassignedSupervisor(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	report, err := f.svc.Submit(ctx, f.student.ID, "Ready for review.")
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	_, err = f.svc.AgencyReview(ctx, report.ID, f.otherFaculty.ID, true)
+	if !errors.Is(err, reports.ErrNotAssignedSupervisor) {
+		t.Fatalf("error = %v, want ErrNotAssignedSupervisor", err)
+	}
+}
+
+func TestGetForStudent_NotFound(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.svc.GetForStudent(context.Background(), f.student.ID)
+	if !errors.Is(err, reports.ErrReportNotFound) {
+		t.Fatalf("error = %v, want ErrReportNotFound", err)
 	}
 }

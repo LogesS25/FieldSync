@@ -30,6 +30,10 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
 	group := r.Group("/institutions", auth.RequireAuth(jwtSecret), auth.RequireRole("administrator"))
 	group.POST("", h.create)
 	group.GET("", h.list)
+
+	// Unauthenticated: the registration screen needs to show a university
+	// picker before the user has an account.
+	r.GET("/public/institutions", h.list)
 }
 
 type createInstitutionRequest struct {

@@ -82,7 +82,7 @@ func TestCreatePlacement_Success(t *testing.T) {
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 	institution := testutil.CreateTestInstitution(t, queries)
-	agency := testutil.CreateTestAgency(t, queries)
+	agency := testutil.CreateTestAgency(t, queries, institution.ID)
 
 	practicum, err := svc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{})
 	if err != nil {
@@ -102,7 +102,8 @@ func TestCreatePlacement_PracticumNotFound(t *testing.T) {
 	svc, queries := newTestSetup(t)
 	ctx := context.Background()
 
-	agency := testutil.CreateTestAgency(t, queries)
+	institution := testutil.CreateTestInstitution(t, queries)
+	agency := testutil.CreateTestAgency(t, queries, institution.ID)
 	fakePracticumID, err := db.ParseUUID("00000000-0000-0000-0000-000000000000")
 	if err != nil {
 		t.Fatalf("ParseUUID: %v", err)
@@ -196,7 +197,7 @@ func TestGetSummaryForStudent_WithPlacementAndSupervisors(t *testing.T) {
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 	institution := testutil.CreateTestInstitution(t, queries)
-	agency := testutil.CreateTestAgency(t, queries)
+	agency := testutil.CreateTestAgency(t, queries, institution.ID)
 	supervisor := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleFacultySupervisor)
 
 	practicum, err := svc.CreatePracticum(ctx, student.ID, institution.ID, parseDate(t, "2026-01-01"), pgtype.Date{})

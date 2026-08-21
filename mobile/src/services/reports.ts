@@ -1,14 +1,27 @@
-import { apiRequest } from '@/lib/api-client';
-import type { WeeklyReport } from '@/types/fieldwork';
+import { ApiError, apiRequest } from '@/lib/api-client';
+import type { ConsolidatedReport } from '@/types/fieldwork';
 
-export function listWeeklyReports(): Promise<WeeklyReport[]> {
-  return apiRequest<WeeklyReport[]>('/weekly-reports');
+export function submitConsolidatedReport(summary: string): Promise<ConsolidatedReport> {
+  return apiRequest<ConsolidatedReport>('/consolidated-reports', { method: 'POST', body: { summary } });
 }
 
-export function submitWeeklyReport(input: {
-  weekStartDate: string;
-  weekEndDate: string;
-  summary: string;
-}): Promise<WeeklyReport> {
-  return apiRequest<WeeklyReport>('/weekly-reports', { method: 'POST', body: input });
+export async function getMyConsolidatedReport(): Promise<ConsolidatedReport | null> {
+  try {
+    return await apiRequest<ConsolidatedReport>('/consolidated-reports/me');
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export function listPendingConsolidatedReports(): Promise<ConsolidatedReport[]> {
+  return apiRequest<ConsolidatedReport[]>('/consolidated-reports/pending');
+}
+
+export function agencyReviewReport(id: string, decision: 'approved' | 'rejected'): Promise<ConsolidatedReport> {
+  return apiRequest<ConsolidatedReport>(`/consolidated-reports/${id}/agency-review`, { method: 'POST', body: { decision } });
+}
+
+export function facultyReviewReport(id: string, decision: 'approved' | 'rejected'): Promise<ConsolidatedReport> {
+  return apiRequest<ConsolidatedReport>(`/consolidated-reports/${id}/faculty-review`, { method: 'POST', body: { decision } });
 }

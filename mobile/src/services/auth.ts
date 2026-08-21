@@ -19,6 +19,8 @@ export function register(input: {
   password: string;
   fullName: string;
   role: UserRole;
+  institutionId?: string;
+  agencyId?: string;
 }): Promise<SessionResponse> {
   return apiRequest<SessionResponse>('/auth/register', {
     method: 'POST',

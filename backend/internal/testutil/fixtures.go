@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
 )
@@ -45,11 +47,14 @@ func CreateTestInstitution(t *testing.T, queries *sqlcgen.Queries) sqlcgen.Insti
 	return institution
 }
 
-func CreateTestAgency(t *testing.T, queries *sqlcgen.Queries) sqlcgen.Agency {
+func CreateTestAgency(t *testing.T, queries *sqlcgen.Queries, institutionID pgtype.UUID) sqlcgen.Agency {
 	t.Helper()
 
 	name := fmt.Sprintf("Test Agency %d", time.Now().UnixNano())
-	agency, err := queries.CreateAgency(context.Background(), name)
+	agency, err := queries.CreateAgency(context.Background(), sqlcgen.CreateAgencyParams{
+		Name:          name,
+		InstitutionID: institutionID,
+	})
 	if err != nil {
 		t.Fatalf("CreateAgency: %v", err)
 	}

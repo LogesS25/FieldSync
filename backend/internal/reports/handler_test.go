@@ -9,27 +9,23 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
-	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
-	"github.com/fieldsync/backend/internal/testutil"
 )
 
 const testSecret = "test-secret-do-not-use-in-prod"
 
-func newTestRouter(t *testing.T) (*gin.Engine, *sqlcgen.Queries, *practicums.Service) {
+func newTestRouter(t *testing.T) (*gin.Engine, testFixture) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	queries := testutil.NewTestQueries(t)
-	practicumsService := practicums.NewService(queries)
+	f := newFixture(t)
 	r := gin.New()
-	reports.NewHandler(reports.NewService(queries, practicumsService)).RegisterRoutes(r, testSecret)
-	return r, queries, practicumsService
+	reports.NewHandler(f.svc).RegisterRoutes(r, testSecret)
+	return r, f
 }
 
 func tokenFor(t *testing.T, user sqlcgen.User) string {
@@ -59,87 +55,63 @@ func doJSON(t *testing.T, r *gin.Engine, method, path, bearerToken string, body 
 	return rec
 }
 
-func TestSubmitWeeklyReportHandler_RejectsMissingSummary(t *testing.T) {
-	r, queries, practicumsSvc := newTestRouter(t)
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	startDate, err := db.ParseDate("2026-01-01")
-	if err != nil {
-		t.Fatalf("ParseDate: %v", err)
-	}
-	if _, err := practicumsSvc.CreatePracticum(t.Context(), student.ID, institution.ID, startDate, pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
+func TestSubmitHandler_RequiresStudentRole(t *testing.T) {
+	r, f := newTestRouter(t)
 
-	rec := doJSON(t, r, http.MethodPost, "/weekly-reports", tokenFor(t, student), map[string]string{
-		"weekStartDate": "2026-01-05",
-		"weekEndDate":   "2026-01-11",
+	rec := doJSON(t, r, http.MethodPost, "/consolidated-reports", tokenFor(t, f.faculty), map[string]string{
+		"summary": "Should be rejected.",
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 }
 
-func TestSubmitWeeklyReportHandler_DuplicateWeekReturns409(t *testing.T) {
-	r, queries, practicumsSvc := newTestRouter(t)
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	startDate, err := db.ParseDate("2026-01-01")
-	if err != nil {
-		t.Fatalf("ParseDate: %v", err)
-	}
-	if _, err := practicumsSvc.CreatePracticum(t.Context(), student.ID, institution.ID, startDate, pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
-	token := tokenFor(t, student)
+func TestGetMineHandler_NotFoundReturns404(t *testing.T) {
+	r, f := newTestRouter(t)
 
-	payload := map[string]string{
-		"weekStartDate": "2026-01-05",
-		"weekEndDate":   "2026-01-11",
-		"summary":       "Week one summary.",
-	}
-	first := doJSON(t, r, http.MethodPost, "/weekly-reports", token, payload)
-	if first.Code != http.StatusCreated {
-		t.Fatalf("first status = %d, want %d; body = %s", first.Code, http.StatusCreated, first.Body.String())
-	}
-
-	second := doJSON(t, r, http.MethodPost, "/weekly-reports", token, payload)
-	if second.Code != http.StatusConflict {
-		t.Fatalf("second status = %d, want %d; body = %s", second.Code, http.StatusConflict, second.Body.String())
+	rec := doJSON(t, r, http.MethodGet, "/consolidated-reports/me", tokenFor(t, f.student), nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 }
 
-func TestWeeklyReportFlow_SubmitThenList(t *testing.T) {
-	r, queries, practicumsSvc := newTestRouter(t)
-	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
-	institution := testutil.CreateTestInstitution(t, queries)
-	startDate, err := db.ParseDate("2026-01-01")
-	if err != nil {
-		t.Fatalf("ParseDate: %v", err)
-	}
-	if _, err := practicumsSvc.CreatePracticum(t.Context(), student.ID, institution.ID, startDate, pgtype.Date{}); err != nil {
-		t.Fatalf("CreatePracticum returned error: %v", err)
-	}
-	token := tokenFor(t, student)
+func TestFullReviewFlow_AgencyThenFaculty(t *testing.T) {
+	r, f := newTestRouter(t)
+	studentToken := tokenFor(t, f.student)
 
-	submitRec := doJSON(t, r, http.MethodPost, "/weekly-reports", token, map[string]string{
-		"weekStartDate": "2026-01-05",
-		"weekEndDate":   "2026-01-11",
-		"summary":       "Worked on case documentation.",
+	submitRec := doJSON(t, r, http.MethodPost, "/consolidated-reports", studentToken, map[string]string{
+		"summary": "Full fieldwork summary.",
 	})
 	if submitRec.Code != http.StatusCreated {
 		t.Fatalf("submit status = %d, want %d; body = %s", submitRec.Code, http.StatusCreated, submitRec.Body.String())
 	}
+	var created map[string]any
+	if err := json.Unmarshal(submitRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding submit response: %v", err)
+	}
+	reportID := created["id"].(string)
 
-	listRec := doJSON(t, r, http.MethodGet, "/weekly-reports", token, nil)
-	var reportList []map[string]any
-	if err := json.Unmarshal(listRec.Body.Bytes(), &reportList); err != nil {
-		t.Fatalf("decoding list response: %v", err)
+	facultyTooEarly := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/faculty-review", tokenFor(t, f.faculty), map[string]string{"decision": "approved"})
+	if facultyTooEarly.Code != http.StatusConflict {
+		t.Fatalf("premature faculty review status = %d, want %d; body = %s", facultyTooEarly.Code, http.StatusConflict, facultyTooEarly.Body.String())
 	}
-	if len(reportList) != 1 {
-		t.Fatalf("len(reportList) = %d, want 1", len(reportList))
+
+	agencyRec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/agency-review", tokenFor(t, f.agencySup), map[string]string{"decision": "approved"})
+	if agencyRec.Code != http.StatusOK {
+		t.Fatalf("agency review status = %d, want %d; body = %s", agencyRec.Code, http.StatusOK, agencyRec.Body.String())
 	}
-	if reportList[0]["status"] != "submitted" {
-		t.Errorf("status = %v, want submitted", reportList[0]["status"])
+
+	facultyRec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/faculty-review", tokenFor(t, f.faculty), map[string]string{"decision": "approved"})
+	if facultyRec.Code != http.StatusOK {
+		t.Fatalf("faculty review status = %d, want %d; body = %s", facultyRec.Code, http.StatusOK, facultyRec.Body.String())
+	}
+
+	meRec := doJSON(t, r, http.MethodGet, "/consolidated-reports/me", studentToken, nil)
+	var me map[string]any
+	if err := json.Unmarshal(meRec.Body.Bytes(), &me); err != nil {
+		t.Fatalf("decoding /me response: %v", err)
+	}
+	if me["agencyStatus"] != "approved" || me["facultyStatus"] != "approved" {
+		t.Errorf("report = %+v, want both statuses approved", me)
 	}
 }

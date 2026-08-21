@@ -22,32 +22,21 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
-	group := r.Group("/weekly-reports", auth.RequireAuth(jwtSecret), auth.RequireRole("student"))
-	group.POST("", h.submit)
-	group.GET("", h.list)
+	r.POST("/consolidated-reports", auth.RequireAuth(jwtSecret), auth.RequireRole("student"), h.submit)
+	r.GET("/consolidated-reports/me", auth.RequireAuth(jwtSecret), auth.RequireRole("student"), h.getMine)
+	r.GET("/consolidated-reports/pending", auth.RequireAuth(jwtSecret), auth.RequireRole("faculty_supervisor", "agency_supervisor"), h.listPending)
+	r.POST("/consolidated-reports/:id/agency-review", auth.RequireAuth(jwtSecret), auth.RequireRole("agency_supervisor"), h.agencyReview)
+	r.POST("/consolidated-reports/:id/faculty-review", auth.RequireAuth(jwtSecret), auth.RequireRole("faculty_supervisor"), h.facultyReview)
 }
 
-type submitWeeklyReportRequest struct {
-	WeekStartDate string `json:"weekStartDate" binding:"required"`
-	WeekEndDate   string `json:"weekEndDate" binding:"required"`
-	Summary       string `json:"summary" binding:"required"`
+type submitRequest struct {
+	Summary string `json:"summary" binding:"required"`
 }
 
 func (h *Handler) submit(c *gin.Context) {
-	var req submitWeeklyReportRequest
+	var req submitRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	weekStart, err := db.ParseDate(req.WeekStartDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "weekStartDate must be YYYY-MM-DD"})
-		return
-	}
-	weekEnd, err := db.ParseDate(req.WeekEndDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "weekEndDate must be YYYY-MM-DD"})
 		return
 	}
 
@@ -57,7 +46,7 @@ func (h *Handler) submit(c *gin.Context) {
 		return
 	}
 
-	report, err := h.service.Submit(c.Request.Context(), studentID, weekStart, weekEnd, req.Summary)
+	report, err := h.service.Submit(c.Request.Context(), studentID, req.Summary)
 	if err != nil {
 		if errors.Is(err, practicums.ErrNoActivePracticum) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -65,26 +54,46 @@ func (h *Handler) submit(c *gin.Context) {
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			c.JSON(http.StatusConflict, gin.H{"error": "a report for that week has already been submitted"})
+			c.JSON(http.StatusConflict, gin.H{"error": "a consolidated report has already been submitted for this practicum"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not submit weekly report"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not submit consolidated report"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, toResponse(report))
 }
 
-func (h *Handler) list(c *gin.Context) {
+func (h *Handler) getMine(c *gin.Context) {
 	studentID, err := auth.CurrentUserID(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	reportList, err := h.service.ListForStudent(c.Request.Context(), studentID)
+	report, err := h.service.GetForStudent(c.Request.Context(), studentID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list weekly reports"})
+		if errors.Is(err, ErrReportNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not load consolidated report"})
+		return
+	}
+
+	c.JSON(http.StatusOK, toResponse(report))
+}
+
+func (h *Handler) listPending(c *gin.Context) {
+	supervisorID, err := auth.CurrentUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	reportList, err := h.service.ListPendingForSupervisor(c.Request.Context(), supervisorID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not list pending reports"})
 		return
 	}
 
@@ -95,13 +104,80 @@ func (h *Handler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func toResponse(report sqlcgen.WeeklyReport) gin.H {
+type reviewRequest struct {
+	Decision string `json:"decision" binding:"required,oneof=approved rejected"`
+}
+
+func (h *Handler) agencyReview(c *gin.Context) {
+	var req reviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	reportID, err := db.ParseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid report id"})
+		return
+	}
+	supervisorID, err := auth.CurrentUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	report, err := h.service.AgencyReview(c.Request.Context(), reportID, supervisorID, req.Decision == "approved")
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toResponse(report))
+}
+
+func (h *Handler) facultyReview(c *gin.Context) {
+	var req reviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	reportID, err := db.ParseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid report id"})
+		return
+	}
+	supervisorID, err := auth.CurrentUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	report, err := h.service.FacultyReview(c.Request.Context(), reportID, supervisorID, req.Decision == "approved")
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toResponse(report))
+}
+
+func respondServiceError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrReportNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrNotAssignedSupervisor):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrAgencyReviewFirst), errors.Is(err, ErrAlreadyReviewedByRole):
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "an unexpected error occurred"})
+	}
+}
+
+func toResponse(report sqlcgen.ConsolidatedReport) gin.H {
 	return gin.H{
 		"id":            db.UUIDToString(report.ID),
 		"practicumId":   db.UUIDToString(report.PracticumID),
-		"weekStartDate": db.DateToStringPtr(report.WeekStartDate),
-		"weekEndDate":   db.DateToStringPtr(report.WeekEndDate),
 		"summary":       report.Summary,
-		"status":        report.Status,
+		"agencyStatus":  report.AgencyStatus,
+		"facultyStatus": report.FacultyStatus,
+		"submittedAt":   report.SubmittedAt.Time,
 	}
 }

@@ -16,6 +16,10 @@ var (
 	ErrEmailTaken          = errors.New("email already registered")
 	ErrInvalidCredentials  = errors.New("invalid email or password")
 	ErrInvalidRefreshToken = errors.New("invalid or expired refresh token")
+	ErrInstitutionRequired = errors.New("institutionId is required for this role")
+	ErrAgencyRequired      = errors.New("agencyId is required for this role")
+	ErrInstitutionNotFound = errors.New("institution not found")
+	ErrAgencyNotFound      = errors.New("agency not found")
 )
 
 // RegisterableRoles are the roles a user may self-register as. Administrator
@@ -49,17 +53,51 @@ func NewService(queries *sqlcgen.Queries, jwtSecret string, accessTTL, refreshTT
 	}
 }
 
-func (s *Service) Register(ctx context.Context, email, password, fullName string, role sqlcgen.UserRole) (Session, error) {
-	passwordHash, err := HashPassword(password)
+// RegisterInput's InstitutionID/AgencyID are required per-role: student and
+// faculty_supervisor need InstitutionID, agency_supervisor needs AgencyID —
+// business requirements §3 ties every stakeholder to a university, directly
+// or (for agency supervisors) via their agency. Without this, a student
+// couldn't send a practicum team request (internal/teamrequests validates
+// the agency/faculty they pick belong to their own university).
+type RegisterInput struct {
+	Email         string
+	Password      string
+	FullName      string
+	Role          sqlcgen.UserRole
+	InstitutionID pgtype.UUID
+	AgencyID      pgtype.UUID
+}
+
+func (s *Service) Register(ctx context.Context, in RegisterInput) (Session, error) {
+	switch in.Role {
+	case sqlcgen.UserRoleStudent, sqlcgen.UserRoleFacultySupervisor:
+		if !in.InstitutionID.Valid {
+			return Session{}, ErrInstitutionRequired
+		}
+		if _, err := s.queries.GetInstitutionByID(ctx, in.InstitutionID); err != nil {
+			return Session{}, ErrInstitutionNotFound
+		}
+	case sqlcgen.UserRoleAgencySupervisor:
+		if !in.AgencyID.Valid {
+			return Session{}, ErrAgencyRequired
+		}
+		if _, err := s.queries.GetAgencyByID(ctx, in.AgencyID); err != nil {
+			return Session{}, ErrAgencyNotFound
+		}
+	}
+
+	passwordHash, err := HashPassword(in.Password)
 	if err != nil {
 		return Session{}, err
 	}
 
 	user, err := s.queries.CreateUser(ctx, sqlcgen.CreateUserParams{
-		Email:        email,
-		PasswordHash: passwordHash,
-		Role:         role,
-		FullName:     fullName,
+		Email:         in.Email,
+		PasswordHash:  passwordHash,
+		Role:          in.Role,
+		FullName:      in.FullName,
+		InstitutionID: in.InstitutionID,
+		AgencyID:      in.AgencyID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

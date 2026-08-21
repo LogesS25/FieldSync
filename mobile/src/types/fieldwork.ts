@@ -1,5 +1,7 @@
 export type VerificationStatus = 'pending' | 'verified' | 'rejected';
-export type ReportStatus = 'submitted' | 'reviewed';
+export type ReviewDecision = 'pending' | 'approved' | 'rejected';
+export type AttendanceSession = 'morning' | 'evening';
+export type TeamRequestDecision = 'pending' | 'accepted' | 'rejected';
 
 export interface FieldActivity {
   id: string;
@@ -13,19 +15,30 @@ export interface AttendanceRecord {
   id: string;
   practicumId: string;
   attendanceDate: string;
-  hours: number;
-  verificationStatus: VerificationStatus;
+  session: AttendanceSession;
+  hours: number | null;
+  agencyStatus: ReviewDecision;
+  facultyStatus: ReviewDecision;
 }
 
-export interface AttendanceSummary {
-  totalHours: number;
-}
-
-export interface WeeklyReport {
+export interface ConsolidatedReport {
   id: string;
   practicumId: string;
-  weekStartDate: string;
-  weekEndDate: string;
   summary: string;
-  status: ReportStatus;
+  agencyStatus: ReviewDecision;
+  facultyStatus: ReviewDecision;
+  submittedAt: string;
+}
+
+export interface TeamRequest {
+  id: string;
+  studentId: string;
+  agencyId: string;
+  facultySupervisorId: string;
+  agencySupervisorId: string;
+  fieldworkDescription: string;
+  startDate: string;
+  facultyDecision: TeamRequestDecision;
+  agencyDecision: TeamRequestDecision;
+  formedPracticumId: string | null;
 }

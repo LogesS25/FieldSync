@@ -19,6 +19,7 @@ import (
 	"github.com/fieldsync/backend/internal/institutions"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
+	"github.com/fieldsync/backend/internal/teamrequests"
 	"github.com/fieldsync/backend/internal/users"
 )
 
@@ -53,6 +54,7 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 	activities.NewHandler(activities.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 	attendance.NewHandler(attendance.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 	reports.NewHandler(reports.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
+	teamrequests.NewHandler(teamrequests.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r
 }
