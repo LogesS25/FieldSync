@@ -9,11 +9,13 @@ package attendance
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 )
 
@@ -25,12 +27,21 @@ var (
 )
 
 type Service struct {
-	queries    *sqlcgen.Queries
-	practicums *practicums.Service
+	queries       *sqlcgen.Queries
+	practicums    *practicums.Service
+	notifications *notifications.Service
 }
 
-func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service) *Service {
-	return &Service{queries: queries, practicums: practicumsService}
+func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service, notificationsService *notifications.Service) *Service {
+	return &Service{queries: queries, practicums: practicumsService, notifications: notificationsService}
+}
+
+// notify is best-effort: a failed notification insert must never fail the
+// business action that triggered it.
+func (s *Service) notify(ctx context.Context, recipientID pgtype.UUID, message string) {
+	if _, err := s.notifications.Create(ctx, recipientID, message); err != nil {
+		log.Printf("attendance: failed to create notification for %s: %v", recipientID, err)
+	}
 }
 
 type CreateInput struct {
@@ -88,11 +99,17 @@ func (s *Service) AgencyReview(ctx context.Context, recordID, supervisorID pgtyp
 		decision = sqlcgen.ReviewDecisionApproved
 	}
 
-	return s.queries.SetAttendanceAgencyDecision(ctx, sqlcgen.SetAttendanceAgencyDecisionParams{
+	updated, err := s.queries.SetAttendanceAgencyDecision(ctx, sqlcgen.SetAttendanceAgencyDecisionParams{
 		ID:               recordID,
 		AgencyStatus:     decision,
 		AgencyReviewedBy: supervisorID,
 	})
+	if err != nil {
+		return sqlcgen.AttendanceRecord{}, err
+	}
+
+	s.notify(ctx, updated.StudentID, "Your "+string(updated.Session)+" attendance for "+dateString(updated.AttendanceDate)+" was "+decisionVerb(approve)+" by your agency supervisor.")
+	return updated, nil
 }
 
 func (s *Service) FacultyReview(ctx context.Context, recordID, supervisorID pgtype.UUID, approve bool) (sqlcgen.AttendanceRecord, error) {
@@ -115,11 +132,31 @@ func (s *Service) FacultyReview(ctx context.Context, recordID, supervisorID pgty
 		decision = sqlcgen.ReviewDecisionApproved
 	}
 
-	return s.queries.SetAttendanceFacultyDecision(ctx, sqlcgen.SetAttendanceFacultyDecisionParams{
+	updated, err := s.queries.SetAttendanceFacultyDecision(ctx, sqlcgen.SetAttendanceFacultyDecisionParams{
 		ID:                recordID,
 		FacultyStatus:     decision,
 		FacultyReviewedBy: supervisorID,
 	})
+	if err != nil {
+		return sqlcgen.AttendanceRecord{}, err
+	}
+
+	s.notify(ctx, updated.StudentID, "Your "+string(updated.Session)+" attendance for "+dateString(updated.AttendanceDate)+" was "+decisionVerb(approve)+" by your faculty supervisor.")
+	return updated, nil
+}
+
+func decisionVerb(approve bool) string {
+	if approve {
+		return "approved"
+	}
+	return "rejected"
+}
+
+func dateString(d pgtype.Date) string {
+	if !d.Valid {
+		return "an unknown date"
+	}
+	return d.Time.Format("2006-01-02")
 }
 
 func (s *Service) requireAssignedSupervisor(ctx context.Context, practicumID, supervisorID pgtype.UUID) error {

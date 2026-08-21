@@ -111,3 +111,10 @@ func (s *Service) GetActivePracticumID(ctx context.Context, studentID pgtype.UUI
 	}
 	return id, err
 }
+
+// ListSupervisorIDs is used by domains that need to notify both assigned
+// supervisors of an event (e.g. a new daily report submission) without
+// duplicating this lookup in every package.
+func (s *Service) ListSupervisorIDs(ctx context.Context, practicumID pgtype.UUID) ([]pgtype.UUID, error) {
+	return s.queries.ListSupervisorIDsForPracticum(ctx, practicumID)
+}

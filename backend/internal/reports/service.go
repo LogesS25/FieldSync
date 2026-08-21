@@ -8,10 +8,12 @@ package reports
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 )
 
@@ -25,12 +27,21 @@ var (
 )
 
 type Service struct {
-	queries    *sqlcgen.Queries
-	practicums *practicums.Service
+	queries       *sqlcgen.Queries
+	practicums    *practicums.Service
+	notifications *notifications.Service
 }
 
-func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service) *Service {
-	return &Service{queries: queries, practicums: practicumsService}
+func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service, notificationsService *notifications.Service) *Service {
+	return &Service{queries: queries, practicums: practicumsService, notifications: notificationsService}
+}
+
+// notify is best-effort: a failed notification insert must never fail the
+// business action that triggered it.
+func (s *Service) notify(ctx context.Context, recipientID pgtype.UUID, message string) {
+	if _, err := s.notifications.Create(ctx, recipientID, message); err != nil {
+		log.Printf("reports: failed to create notification for %s: %v", recipientID, err)
+	}
 }
 
 func (s *Service) Submit(ctx context.Context, studentID pgtype.UUID, summary string) (sqlcgen.ConsolidatedReport, error) {
@@ -70,10 +81,23 @@ func (s *Service) Resubmit(ctx context.Context, reportID, studentID pgtype.UUID,
 		return sqlcgen.ConsolidatedReport{}, ErrNotRejected
 	}
 
-	return s.queries.ResubmitConsolidatedReport(ctx, sqlcgen.ResubmitConsolidatedReportParams{
+	updated, err := s.queries.ResubmitConsolidatedReport(ctx, sqlcgen.ResubmitConsolidatedReportParams{
 		ID:      reportID,
 		Summary: summary,
 	})
+	if err != nil {
+		return sqlcgen.ConsolidatedReport{}, err
+	}
+
+	supervisorIDs, listErr := s.practicums.ListSupervisorIDs(ctx, updated.PracticumID)
+	if listErr != nil {
+		log.Printf("reports: failed to list supervisors to notify for practicum %s: %v", updated.PracticumID, listErr)
+	}
+	for _, supervisorID := range supervisorIDs {
+		s.notify(ctx, supervisorID, "A student resubmitted their consolidated report for review.")
+	}
+
+	return updated, nil
 }
 
 func (s *Service) ListPendingForSupervisor(ctx context.Context, supervisorID pgtype.UUID) ([]sqlcgen.ConsolidatedReport, error) {
@@ -97,11 +121,17 @@ func (s *Service) AgencyReview(ctx context.Context, reportID, supervisorID pgtyp
 		decision = sqlcgen.ReviewDecisionApproved
 	}
 
-	return s.queries.SetConsolidatedReportAgencyDecision(ctx, sqlcgen.SetConsolidatedReportAgencyDecisionParams{
+	updated, err := s.queries.SetConsolidatedReportAgencyDecision(ctx, sqlcgen.SetConsolidatedReportAgencyDecisionParams{
 		ID:               reportID,
 		AgencyStatus:     decision,
 		AgencyReviewedBy: supervisorID,
 	})
+	if err != nil {
+		return sqlcgen.ConsolidatedReport{}, err
+	}
+
+	s.notify(ctx, updated.StudentID, "Your consolidated report was "+decisionVerb(approve)+" by your agency supervisor.")
+	return updated, nil
 }
 
 func (s *Service) FacultyReview(ctx context.Context, reportID, supervisorID pgtype.UUID, approve bool) (sqlcgen.ConsolidatedReport, error) {
@@ -124,11 +154,24 @@ func (s *Service) FacultyReview(ctx context.Context, reportID, supervisorID pgty
 		decision = sqlcgen.ReviewDecisionApproved
 	}
 
-	return s.queries.SetConsolidatedReportFacultyDecision(ctx, sqlcgen.SetConsolidatedReportFacultyDecisionParams{
+	updated, err := s.queries.SetConsolidatedReportFacultyDecision(ctx, sqlcgen.SetConsolidatedReportFacultyDecisionParams{
 		ID:                reportID,
 		FacultyStatus:     decision,
 		FacultyReviewedBy: supervisorID,
 	})
+	if err != nil {
+		return sqlcgen.ConsolidatedReport{}, err
+	}
+
+	s.notify(ctx, updated.StudentID, "Your consolidated report was "+decisionVerb(approve)+" by your faculty supervisor.")
+	return updated, nil
+}
+
+func decisionVerb(approve bool) string {
+	if approve {
+		return "approved"
+	}
+	return "rejected"
 }
 
 func (s *Service) requireAssignedSupervisor(ctx context.Context, practicumID, supervisorID pgtype.UUID) error {

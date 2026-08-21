@@ -9,6 +9,7 @@ import (
 
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
 	"github.com/fieldsync/backend/internal/testutil"
@@ -57,7 +58,7 @@ func newFixture(t *testing.T) testFixture {
 	}
 
 	return testFixture{
-		svc:          reports.NewService(queries, practicumsSvc),
+		svc:          reports.NewService(queries, practicumsSvc, notifications.NewService(queries)),
 		queries:      queries,
 		student:      student,
 		faculty:      faculty,
@@ -93,7 +94,7 @@ func TestSubmit_SecondReportForSamePracticumRejected(t *testing.T) {
 
 func TestSubmit_NoActivePracticum(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
-	svc := reports.NewService(queries, practicums.NewService(queries))
+	svc := reports.NewService(queries, practicums.NewService(queries), notifications.NewService(queries))
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 
 	_, err := svc.Submit(context.Background(), student.ID, "No practicum yet.")

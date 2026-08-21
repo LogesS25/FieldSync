@@ -15,6 +15,7 @@ import (
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
 	"github.com/fieldsync/backend/internal/feedback"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/testutil"
 )
@@ -52,7 +53,7 @@ func TestSubmitHandler_RequiresSupervisorRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	queries := testutil.NewTestQueries(t)
 	r := gin.New()
-	feedback.NewHandler(feedback.NewService(queries)).RegisterRoutes(r, testSecret)
+	feedback.NewHandler(feedback.NewService(queries, notifications.NewService(queries))).RegisterRoutes(r, testSecret)
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 	fakeID, err := db.ParseUUID("00000000-0000-0000-0000-000000000000")
@@ -75,7 +76,7 @@ func TestFullFeedbackFlow_SubmitThenStudentSees(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	practicumsSvc := practicums.NewService(queries)
 	r := gin.New()
-	feedback.NewHandler(feedback.NewService(queries)).RegisterRoutes(r, testSecret)
+	feedback.NewHandler(feedback.NewService(queries, notifications.NewService(queries))).RegisterRoutes(r, testSecret)
 	ctx := t.Context()
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)

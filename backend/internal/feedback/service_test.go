@@ -10,6 +10,7 @@ import (
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
 	"github.com/fieldsync/backend/internal/feedback"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/testutil"
 )
@@ -26,7 +27,7 @@ func parseDate(t *testing.T, s string) pgtype.Date {
 func TestSubmit_Success(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	practicumsSvc := practicums.NewService(queries)
-	svc := feedback.NewService(queries)
+	svc := feedback.NewService(queries, notifications.NewService(queries))
 	ctx := context.Background()
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
@@ -52,7 +53,7 @@ func TestSubmit_Success(t *testing.T) {
 func TestSubmit_RejectsUnassignedSupervisor(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	practicumsSvc := practicums.NewService(queries)
-	svc := feedback.NewService(queries)
+	svc := feedback.NewService(queries, notifications.NewService(queries))
 	ctx := context.Background()
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
@@ -72,7 +73,7 @@ func TestSubmit_RejectsUnassignedSupervisor(t *testing.T) {
 func TestSubmit_DuplicateForSameWeekRejected(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	practicumsSvc := practicums.NewService(queries)
-	svc := feedback.NewService(queries)
+	svc := feedback.NewService(queries, notifications.NewService(queries))
 	ctx := context.Background()
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
@@ -98,7 +99,7 @@ func TestSubmit_DuplicateForSameWeekRejected(t *testing.T) {
 func TestListForStudent_IncludesBothSupervisors(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	practicumsSvc := practicums.NewService(queries)
-	svc := feedback.NewService(queries)
+	svc := feedback.NewService(queries, notifications.NewService(queries))
 	ctx := context.Background()
 
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)

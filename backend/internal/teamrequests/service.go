@@ -9,10 +9,12 @@ package teamrequests
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 )
 
@@ -36,12 +38,21 @@ var (
 )
 
 type Service struct {
-	queries    *sqlcgen.Queries
-	practicums *practicums.Service
+	queries       *sqlcgen.Queries
+	practicums    *practicums.Service
+	notifications *notifications.Service
 }
 
-func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service) *Service {
-	return &Service{queries: queries, practicums: practicumsService}
+func NewService(queries *sqlcgen.Queries, practicumsService *practicums.Service, notificationsService *notifications.Service) *Service {
+	return &Service{queries: queries, practicums: practicumsService, notifications: notificationsService}
+}
+
+// notify is best-effort: a failed notification insert must never fail the
+// business action that triggered it.
+func (s *Service) notify(ctx context.Context, recipientID pgtype.UUID, message string) {
+	if _, err := s.notifications.Create(ctx, recipientID, message); err != nil {
+		log.Printf("teamrequests: failed to create notification for %s: %v", recipientID, err)
+	}
 }
 
 type CreateRequestInput struct {
@@ -104,7 +115,7 @@ func (s *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (sql
 		return sqlcgen.PracticumTeamRequest{}, ErrFieldworkComponentWrongUniversity
 	}
 
-	return s.queries.CreateTeamRequest(ctx, sqlcgen.CreateTeamRequestParams{
+	request, err := s.queries.CreateTeamRequest(ctx, sqlcgen.CreateTeamRequestParams{
 		StudentID:            in.StudentID,
 		InstitutionID:        student.InstitutionID,
 		AgencyID:             in.AgencyID,
@@ -114,6 +125,16 @@ func (s *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (sql
 		FieldworkDescription: in.FieldworkDescription,
 		StartDate:            in.StartDate,
 	})
+	if err != nil {
+		return sqlcgen.PracticumTeamRequest{}, err
+	}
+
+	// Business requirements §8: "the supervisors must receive a
+	// notification" when a student sends a team request.
+	s.notify(ctx, in.FacultySupervisorID, "You have a new practicum team request awaiting your response.")
+	s.notify(ctx, in.AgencySupervisorID, "You have a new practicum team request awaiting your response.")
+
+	return request, nil
 }
 
 func (s *Service) ListForStudent(ctx context.Context, studentID pgtype.UUID) ([]sqlcgen.PracticumTeamRequest, error) {
@@ -153,6 +174,7 @@ func (s *Service) RespondAsFaculty(ctx context.Context, requestID, supervisorID 
 		return sqlcgen.PracticumTeamRequest{}, err
 	}
 
+	s.notify(ctx, updated.StudentID, "Your faculty supervisor "+decisionVerb(accept)+" your team request.")
 	return s.maybeFormTeam(ctx, updated)
 }
 
@@ -181,7 +203,15 @@ func (s *Service) RespondAsAgency(ctx context.Context, requestID, supervisorID p
 		return sqlcgen.PracticumTeamRequest{}, err
 	}
 
+	s.notify(ctx, updated.StudentID, "Your agency supervisor "+decisionVerb(accept)+" your team request.")
 	return s.maybeFormTeam(ctx, updated)
+}
+
+func decisionVerb(accept bool) string {
+	if accept {
+		return "accepted"
+	}
+	return "rejected"
 }
 
 // maybeFormTeam creates the Practicum, Placement, and both
@@ -216,5 +246,10 @@ func (s *Service) maybeFormTeam(ctx context.Context, request sqlcgen.PracticumTe
 	}
 
 	request.FormedPracticumID = practicum.ID
+
+	s.notify(ctx, request.StudentID, "Your practicum team has been formed.")
+	s.notify(ctx, request.FacultySupervisorID, "The practicum team has been formed.")
+	s.notify(ctx, request.AgencySupervisorID, "The practicum team has been formed.")
+
 	return request, nil
 }

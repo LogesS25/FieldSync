@@ -372,6 +372,53 @@ implementing real functionality is not exempt from this.
   uploaded yet. `npx tsc --noEmit`, `npm run lint`, and `npx expo export
   --platform web` all clean.
 
+- **In-app notifications (2026-08-22)** — the other half of Phase 7. Two
+  triggers are explicitly mandated by the requirements doc ("the supervisors
+  must receive a notification" on team request creation, §8; "the agency
+  supervisor and faculty supervisor are notified" on daily report
+  submission, §10); the rest (notifying the student when their own
+  attendance/daily-report/consolidated-report is reviewed, team-request
+  response, team formation, feedback received) is a reasonable UX extension
+  of the same mechanism, not new business/scoring rules, so it's included
+  too. Migration `0009`: `notifications` table (`recipient_id`, `message`
+  — precomputed plain text at insert time, no `kind` enum; add one later if
+  the UI needs to visually differentiate types), `created_at DEFAULT
+  clock_timestamp()` **not** `now()` — `now()` returns the same value for
+  every statement within one transaction, which ties multiple notifications
+  created back-to-back (e.g. team formation notifying three people) and
+  makes "most recent first" ordering nondeterministic (caught by a real
+  test failure, not by inspection).
+  - New `internal/notifications` package: `Service.Create` is best-effort
+    by design — callers log and swallow a failed insert rather than failing
+    the business action that triggered it (a notification bug must never
+    block someone from submitting a report). Routes: `GET /notifications`,
+    `POST /notifications/:id/read`, `POST /notifications/read-all` — all
+    scoped to the caller.
+  - Wired into `teamrequests` (create → notify both supervisors; respond →
+    notify student; team formed → notify all three), `dailyreports` (create
+    → notify both supervisors via new `practicums.ListSupervisorIDs`;
+    review → notify student), `attendance` (review → notify student),
+    `reports` (review → notify student; resubmit → notify both
+    supervisors), and `feedback` (submit → notify student). Every touched
+    service's constructor gained a `*notifications.Service` parameter —
+    mechanical but real blast radius across 5 packages' tests, all updated.
+  - Full backend test coverage (7 new notifications tests; all 5 touched
+    packages' existing suites still pass); verified live end-to-end via
+    curl through the whole chain (team request → both supervisors notified
+    → respond → student notified → team formed → all three notified →
+    daily report submitted → supervisors notified → reviewed → student
+    notified → mark-read → mark-all-read), using a throwaway backend
+    instance on a separate port rather than the user's own running dev
+    server.
+  - Mobile: new shared `components/notifications-screen.tsx` (both role
+    route files render it — no role-specific behavior to justify two
+    copies), unread-styled cards, tap-to-mark-read, "mark all read" header
+    action. `npx tsc --noEmit`, `npm run lint`, and `npx expo export
+    --platform web` all clean.
+  - **Not built**: push notifications (needs external Expo push service
+    setup — a separate, bigger step) and any missed-deadline/nudge alerting
+    (that's a monitoring/compliance concern for Phase 8, not modeled here).
+
 ### In progress
 _(nothing currently)_
 
@@ -381,10 +428,8 @@ _(nothing currently)_
 - Evaluation marks (business requirements §14) — same blocking reason as
   Phase 6: criteria/scale/weightage are explicitly TBD, "do not invent
   these rules."
-- In-app notifications (the other half of Phase 7) — notification records
-  for business events that already exist (attendance/daily-report reviewed,
-  feedback received, team request responded). Push notifications are a
-  separate, bigger step needing external Expo push service setup.
+- Push notifications — needs external Expo push service setup; in-app
+  notifications (above) cover the requirements-mandated triggers today.
 - Phase 8 — Reporting & Monitoring (Basic Requirement Checking, §16, is
   partially blocked too — the "required fieldwork hours" criterion needs
   the hours-calculation formula, which is explicitly TBD per §15; the

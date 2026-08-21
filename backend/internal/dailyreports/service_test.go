@@ -11,6 +11,7 @@ import (
 	"github.com/fieldsync/backend/internal/dailyreports"
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/storage"
 	"github.com/fieldsync/backend/internal/testutil"
@@ -64,7 +65,7 @@ func newFixture(t *testing.T) testFixture {
 	}
 
 	return testFixture{
-		svc:          dailyreports.NewService(queries, practicumsSvc, store),
+		svc:          dailyreports.NewService(queries, practicumsSvc, store, notifications.NewService(queries)),
 		queries:      queries,
 		student:      student,
 		faculty:      faculty,
@@ -110,7 +111,7 @@ func TestCreate_NoActivePracticum(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storage.New: %v", err)
 	}
-	svc := dailyreports.NewService(queries, practicums.NewService(queries), store)
+	svc := dailyreports.NewService(queries, practicums.NewService(queries), store, notifications.NewService(queries))
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 
 	_, err = svc.Create(context.Background(), student.ID, parseDate(t, "2026-01-05"), "a.pdf", strings.NewReader("a"))

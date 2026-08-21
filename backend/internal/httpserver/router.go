@@ -20,6 +20,7 @@ import (
 	"github.com/fieldsync/backend/internal/fieldworkcomponents"
 	"github.com/fieldsync/backend/internal/institutions"
 	"github.com/fieldsync/backend/internal/manuals"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
 	"github.com/fieldsync/backend/internal/storage"
@@ -53,19 +54,22 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) (*gin.Engine, error) {
 	institutions.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	agencies.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	fieldworkcomponents.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
-	feedback.NewHandler(feedback.NewService(queries)).RegisterRoutes(r, cfg.JWTSecret)
+
+	notificationsService := notifications.NewService(queries)
+	notifications.NewHandler(notificationsService).RegisterRoutes(r, cfg.JWTSecret)
+	feedback.NewHandler(feedback.NewService(queries, notificationsService)).RegisterRoutes(r, cfg.JWTSecret)
 
 	practicumsService := practicums.NewService(queries)
 	practicums.NewHandler(practicumsService).RegisterRoutes(r, cfg.JWTSecret)
-	attendance.NewHandler(attendance.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
-	reports.NewHandler(reports.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
-	teamrequests.NewHandler(teamrequests.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
+	attendance.NewHandler(attendance.NewService(queries, practicumsService, notificationsService)).RegisterRoutes(r, cfg.JWTSecret)
+	reports.NewHandler(reports.NewService(queries, practicumsService, notificationsService)).RegisterRoutes(r, cfg.JWTSecret)
+	teamrequests.NewHandler(teamrequests.NewService(queries, practicumsService, notificationsService)).RegisterRoutes(r, cfg.JWTSecret)
 
 	store, err := storage.New(cfg.StorageDir)
 	if err != nil {
 		return nil, err
 	}
-	dailyreports.NewHandler(dailyreports.NewService(queries, practicumsService, store)).RegisterRoutes(r, cfg.JWTSecret)
+	dailyreports.NewHandler(dailyreports.NewService(queries, practicumsService, store, notificationsService)).RegisterRoutes(r, cfg.JWTSecret)
 	manuals.NewHandler(manuals.NewService(queries, store)).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r, nil

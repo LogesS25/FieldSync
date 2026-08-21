@@ -22,6 +22,9 @@ WHERE student_id = $1 AND status = 'active'
 ORDER BY start_date DESC
 LIMIT 1;
 
+-- name: ListSupervisorIDsForPracticum :many
+SELECT supervisor_id FROM supervisor_assignments WHERE practicum_id = $1;
+
 -- name: SupervisorAssignmentExists :one
 SELECT EXISTS (
     SELECT 1 FROM supervisor_assignments

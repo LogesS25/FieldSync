@@ -12,6 +12,7 @@ import (
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/teamrequests"
 	"github.com/fieldsync/backend/internal/testutil"
@@ -87,7 +88,7 @@ func newFixture(t *testing.T) testFixture {
 	agencySup := createScopedUser(t, queries, sqlcgen.UserRoleAgencySupervisor, pgtype.UUID{}, agency.ID)
 
 	return testFixture{
-		svc:         teamrequests.NewService(queries, practicumsSvc),
+		svc:         teamrequests.NewService(queries, practicumsSvc, notifications.NewService(queries)),
 		queries:     queries,
 		institution: institution,
 		agency:      agency,

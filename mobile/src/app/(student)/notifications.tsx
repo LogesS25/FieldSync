@@ -1,11 +1,5 @@
-import { ScreenPlaceholder } from '@/components/screen-placeholder';
+import { NotificationsScreen } from '@/components/notifications-screen';
 
 export default function StudentNotifications() {
-  return (
-    <ScreenPlaceholder
-      icon="notifications-outline"
-      title="Notifications"
-      note="Built in Phase 7 (Resources & Notifications)."
-    />
-  );
+  return <NotificationsScreen />;
 }

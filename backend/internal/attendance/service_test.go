@@ -10,6 +10,7 @@ import (
 	"github.com/fieldsync/backend/internal/attendance"
 	"github.com/fieldsync/backend/internal/db"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/notifications"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/testutil"
 )
@@ -60,7 +61,7 @@ func newFixture(t *testing.T) testFixture {
 	}
 
 	return testFixture{
-		svc:          attendance.NewService(queries, practicumsSvc),
+		svc:          attendance.NewService(queries, practicumsSvc, notifications.NewService(queries)),
 		queries:      queries,
 		student:      student,
 		faculty:      faculty,
@@ -247,7 +248,7 @@ func TestListPendingForSupervisor_AgencyBeforeApprovalFacultyAfter(t *testing.T)
 
 func TestCreate_NoActivePracticum(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
-	svc := attendance.NewService(queries, practicums.NewService(queries))
+	svc := attendance.NewService(queries, practicums.NewService(queries), notifications.NewService(queries))
 	student := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
 
 	_, err := svc.Create(context.Background(), attendance.CreateInput{

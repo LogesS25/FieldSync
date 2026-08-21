@@ -213,6 +213,18 @@ replaces the previous manual rather than keeping history.
   manual's university (or an administrator) may fetch it; everyone else
   gets `403 Forbidden`.
 
+## Notifications
+
+In-app notifications (business requirements §8, §10 — team request created
+and daily report submitted must notify the relevant supervisors; reviewing
+a student's own record notifies them too, as a natural extension). No push
+notifications yet.
+
+- `GET /notifications` — the caller's own notifications, most recent first.
+- `POST /notifications/:id/read` — mark one notification read.
+- `POST /notifications/read-all` — mark all of the caller's notifications
+  read.
+
 ## Development
 
 - `npm run lint` (in `mobile/`) — ESLint via Expo's config
