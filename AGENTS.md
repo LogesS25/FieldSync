@@ -337,16 +337,60 @@ implementing real functionality is not exempt from this.
     visual screenshot check, so this was not eyeballed in-browser; worth a
     manual pass before considering this fully done).
 
+- **Phase 5 — Supervisor Workflows: resolved as complete, nothing left to
+  build (2026-08-21).** Reviewed against the current requirements doc with
+  the user rather than assumed: review queues + weekly feedback were
+  already built in the gap-fill pass; "supervision session" recording
+  (from the original spec, FR-15) was explicitly skipped since the
+  authoritative requirements doc never re-mentions it (superseded by weekly
+  feedback, not silently dropped); Evaluation marks were explicitly skipped
+  since criteria/scale/weightage are marked TBD in the requirements doc
+  ("do not invent these rules") — same blocked status as Phase 6.
+- **Guidelines & Manuals (2026-08-21)** — the well-specified half of Phase
+  7 (business requirements §17). Migration `0008`: `manuals` table,
+  `UNIQUE(institution_id)` — one current manual per university, replaced
+  wholesale on re-upload via `ON CONFLICT DO UPDATE` (upsert), since exact
+  versioning/archiving rules are explicitly TBD and this is the simplest
+  behavior consistent with what IS specified. New `internal/manuals`
+  package, reusing the `internal/storage` package built for daily reports:
+  `POST /manuals` (admin, multipart — `institutionId` + PDF file, upsert),
+  `GET /manuals` (admin, list all), `DELETE /manuals/:institutionId`
+  (admin), `GET /manuals/mine` (any authenticated role — resolves the
+  caller's own university in one query: directly via `users.institution_id`
+  for students/faculty, indirectly via their agency's `institution_id` for
+  agency supervisors), `GET /manuals/:id/file` (auth-gated download — same
+  university or administrator only). No admin mobile UI (matches the
+  existing agencies/institutions/fieldwork-components precedent — no
+  self-service university account exists yet); upload is curl/API-only for
+  now. Full backend test coverage (9 tests, including the agency-supervisor
+  institution-resolution path); verified live end-to-end via curl (upload →
+  replace → student `/manuals/mine` → download 200 → cross-institution
+  download correctly 403s).
+  Mobile: student and supervisor "Resources" screens (previously
+  placeholders) now show the university's manual with a view/download
+  action reusing `lib/open-file.ts`, or an empty state if none has been
+  uploaded yet. `npx tsc --noEmit`, `npm run lint`, and `npx expo export
+  --platform web` all clean.
+
 ### In progress
-_(nothing currently — gap-fill, daily report file upload, and the navigation/design rework are complete; Phase 5 not yet started)_
+_(nothing currently)_
 
 ### Not started
-- Phase 5 — Supervisor Workflows (review, verification, supervision records,
-  feedback, evaluations)
 - Phase 6 — Competency System (framework is an open product decision — do not
   invent scoring rules, keep it configurable — see `docs/ARCHITECTURE.md` §8)
-- Phase 7 — Resources & Notifications (S3 file storage, push notifications)
-- Phase 8 — Reporting & Monitoring
+- Evaluation marks (business requirements §14) — same blocking reason as
+  Phase 6: criteria/scale/weightage are explicitly TBD, "do not invent
+  these rules."
+- In-app notifications (the other half of Phase 7) — notification records
+  for business events that already exist (attendance/daily-report reviewed,
+  feedback received, team request responded). Push notifications are a
+  separate, bigger step needing external Expo push service setup.
+- Phase 8 — Reporting & Monitoring (Basic Requirement Checking, §16, is
+  partially blocked too — the "required fieldwork hours" criterion needs
+  the hours-calculation formula, which is explicitly TBD per §15; the
+  attendance-percentage and required-reports criteria are independently
+  checkable since the university supplies its own threshold, not a fixed
+  invented value)
 - Phase 9 — Administrator web dashboard (Next.js, same Go API)
 
 ---

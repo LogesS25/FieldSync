@@ -195,6 +195,24 @@ practicum record (business requirements §12).
   student's practicum(s).
 - `GET /feedback/mine` (supervisor) — feedback the caller has submitted.
 
+## Guidelines & Manuals
+
+One current practicum guidance manual (PDF) per university (business
+requirements §17). Versioning/archiving is explicitly TBD, so re-uploading
+replaces the previous manual rather than keeping history.
+
+- `POST /manuals` (admin, `multipart/form-data`) — fields: `institutionId`,
+  `file` (PDF only, 20 MiB max). Upserts — a second upload for the same
+  university replaces the first.
+- `GET /manuals` (admin) — list all universities' current manuals.
+- `DELETE /manuals/:institutionId` (admin).
+- `GET /manuals/mine` (student/faculty/agency supervisor) — the manual for
+  the caller's own university (resolved directly for students/faculty,
+  via their agency for agency supervisors).
+- `GET /manuals/:id/file` — downloads the PDF. Only a member of that
+  manual's university (or an administrator) may fetch it; everyone else
+  gets `403 Forbidden`.
+
 ## Development
 
 - `npm run lint` (in `mobile/`) — ESLint via Expo's config
@@ -230,4 +248,6 @@ phase roadmap and §3a for the 2026-08-20 business-model rework that changed
 Phase 3 (supervisor assignment → student-initiated team requests) and
 Phase 4 (attendance/reports) — both now match the updated business
 requirements. See `AGENTS.md` for current status and what's still deferred
-(file-upload daily reports).
+(Competency system, Evaluation marks, push notifications — all blocked on
+stakeholder-supplied criteria the requirements doc explicitly says not to
+invent).

@@ -19,6 +19,7 @@ import (
 	"github.com/fieldsync/backend/internal/feedback"
 	"github.com/fieldsync/backend/internal/fieldworkcomponents"
 	"github.com/fieldsync/backend/internal/institutions"
+	"github.com/fieldsync/backend/internal/manuals"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
 	"github.com/fieldsync/backend/internal/storage"
@@ -65,6 +66,7 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) (*gin.Engine, error) {
 		return nil, err
 	}
 	dailyreports.NewHandler(dailyreports.NewService(queries, practicumsService, store)).RegisterRoutes(r, cfg.JWTSecret)
+	manuals.NewHandler(manuals.NewService(queries, store)).RegisterRoutes(r, cfg.JWTSecret)
 
 	return r, nil
 }
