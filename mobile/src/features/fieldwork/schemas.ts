@@ -5,11 +5,10 @@ const isoDate = z
   .min(1, 'Date is required')
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 
-export const fieldActivitySchema = z.object({
-  activityDate: isoDate,
-  description: z.string().min(1, 'Description is required'),
+export const dailyReportSchema = z.object({
+  reportDate: isoDate,
 });
-export type FieldActivityFormValues = z.infer<typeof fieldActivitySchema>;
+export type DailyReportFormValues = z.infer<typeof dailyReportSchema>;
 
 export const attendanceSchema = z.object({
   attendanceDate: isoDate,

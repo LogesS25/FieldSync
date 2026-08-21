@@ -148,12 +148,19 @@ Self-service, student-only, always scoped to the caller's own active
 practicum (never a client-supplied student ID). Requires a formed practicum
 team, or returns `409 Conflict`.
 
-- `POST /field-activities`, `GET /field-activities` — body: `activityDate`
-  (`YYYY-MM-DD`), `description`. Free-text daily log — no edit/delete (see
-  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) §5c). Note: this does
-  **not** yet match the business requirements' "daily handwritten report"
-  (a file upload) — that rework is a separate, not-yet-started pass (needs
-  real file storage — see `AGENTS.md`).
+- `POST /daily-reports` (student, `multipart/form-data`) — fields:
+  `reportDate` (`YYYY-MM-DD`), `file` (PDF only, 20 MiB max). The
+  handwritten daily fieldwork report (business requirements §10). One per
+  (student, date); no edit/resubmit — the doc leaves correction-after-
+  rejection explicitly TBD for this record type.
+- `GET /daily-reports` (student), `GET /daily-reports/pending` (supervisor,
+  same agency-then-faculty visibility rule as attendance).
+- `GET /daily-reports/:id/file` — downloads the PDF. Only the owning
+  student or an assigned supervisor on that report's practicum may fetch
+  it; everyone else gets `403 Forbidden`.
+- `POST /daily-reports/:id/agency-review`, `POST /daily-reports/:id/faculty-review`
+  — body: `{ "decision": "approved" | "rejected" }`. Same sequential rule as
+  attendance review.
 - `POST /attendance` — body: `attendanceDate`, `session` (`"morning"` |
   `"evening"`), `hours?` (0–24, optional — hours-to-total calculation is
   explicitly TBD, not computed here). One record per (date, session).

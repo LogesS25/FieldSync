@@ -18,6 +18,7 @@ backend/*.exe
 backend/*.test
 backend/internal/db/sqlcgen/
 backend/.env
+backend/data/
 
 # --- General ---
 .DS_Store

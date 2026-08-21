@@ -88,3 +88,35 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   return response.json() as Promise<T>;
 }
+
+function rawUpload(path: string, formData: FormData, accessToken: string | null) {
+  return fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: formData,
+  });
+}
+
+// Separate from apiRequest because multipart/form-data bodies must not be
+// JSON-encoded and must not set Content-Type manually (fetch derives the
+// boundary from the FormData itself).
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const { accessToken } = useAuthStore.getState();
+  let response = await rawUpload(path, formData, accessToken);
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      response = await rawUpload(path, formData, newAccessToken);
+    }
+  }
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => response.statusText);
+    throw new ApiError(response.status, message);
+  }
+
+  return response.json() as Promise<T>;
+}

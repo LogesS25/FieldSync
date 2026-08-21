@@ -23,3 +23,17 @@ func CurrentUserID(c *gin.Context) (pgtype.UUID, error) {
 	}
 	return id, nil
 }
+
+// CurrentUserRole reads the authenticated user's role set by RequireAuth.
+// Only valid to call on a route behind RequireAuth.
+func CurrentUserRole(c *gin.Context) (string, error) {
+	role, ok := c.Get(ContextRoleKey)
+	if !ok {
+		return "", ErrInvalidUserInToken
+	}
+	roleStr, ok := role.(string)
+	if !ok {
+		return "", ErrInvalidUserInToken
+	}
+	return roleStr, nil
+}

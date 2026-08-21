@@ -11,7 +11,7 @@ export default function StudentLayout() {
     <RequireRole allowedRoles={['student']}>
       <Tabs>
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-        <Tabs.Screen name="activities" options={{ title: 'Activities' }} />
+        <Tabs.Screen name="activities" options={{ title: 'Daily Reports' }} />
         <Tabs.Screen name="attendance" options={{ title: 'Attendance' }} />
         <Tabs.Screen name="reports" options={{ title: 'Reports' }} />
         <Tabs.Screen name="supervision" options={{ title: 'Supervision' }} />

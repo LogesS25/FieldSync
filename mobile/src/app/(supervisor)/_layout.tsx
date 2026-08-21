@@ -14,7 +14,7 @@ export default function SupervisorLayout() {
       <Tabs>
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
         <Tabs.Screen name="students" options={{ title: 'Students' }} />
-        <Tabs.Screen name="activities" options={{ title: 'Activities' }} />
+        <Tabs.Screen name="activities" options={{ title: 'Daily Reports' }} />
         <Tabs.Screen name="attendance" options={{ title: 'Attendance' }} />
         <Tabs.Screen name="supervision" options={{ title: 'Supervision' }} />
         <Tabs.Screen name="evaluations" options={{ title: 'Evaluations' }} />

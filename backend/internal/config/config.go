@@ -16,6 +16,7 @@ type Config struct {
 	JWTSecret       string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+	StorageDir      string
 }
 
 func Load() (*Config, error) {
@@ -32,6 +33,7 @@ func Load() (*Config, error) {
 		JWTSecret:       os.Getenv("JWT_SECRET"),
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: 30 * 24 * time.Hour,
+		StorageDir:      getEnv("STORAGE_DIR", "./data/uploads"),
 	}
 
 	if cfg.DatabaseURL == "" {

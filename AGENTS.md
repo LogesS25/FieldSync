@@ -224,16 +224,61 @@ implementing real functionality is not exempt from this.
     --noEmit`, `npm run lint`, and `npx expo export --platform web` all
     clean.
 
+- **Daily Report file upload (2026-08-21)** — the deferred item from the
+  rework above. `field_activities` (free-text daily log) is **replaced
+  entirely** by `daily_reports` (business requirements §10's actual "Daily
+  Handwritten Report" — a PDF upload), not extended; migration `0007` drops
+  `field_activities`/`verification_status` and creates `daily_reports` with
+  the same agency-then-faculty sequential review pattern as
+  attendance/consolidated reports. Dev-only DB, no real data to migrate
+  (2 test rows dropped — see migration 0005/0006 precedent).
+  - New `internal/storage` package: local-disk file storage
+    (`STORAGE_DIR`, default `./data/uploads`; gitignored). Deliberately
+    narrow interface (`Save`/`AbsolutePath`) so swapping to S3 later doesn't
+    ripple into `internal/dailyreports` — see production-readiness notes.
+    Saved filenames are server-generated (random hex), never derived from
+    the student-supplied filename.
+  - New `internal/dailyreports` package: `POST /daily-reports` (student,
+    multipart form — `reportDate` + `file`, PDF only, 20 MiB cap),
+    `GET /daily-reports` (student), `GET /daily-reports/pending`
+    (supervisor, same agency-then-faculty visibility as attendance),
+    `POST /daily-reports/:id/agency-review`,
+    `POST /daily-reports/:id/faculty-review`, and
+    `GET /daily-reports/:id/file` (auth-gated download — owning student or
+    an assigned supervisor only, `ErrNotYourReport`/`ErrNotAssignedSupervisor`
+    otherwise). Unlike the consolidated report, there is **no resubmit** —
+    the business doc explicitly leaves daily-report correction/resubmission
+    TBD (§10), so building one would have been inventing a business rule.
+  - Added `auth.CurrentUserRole` (mirrors the existing `CurrentUserID`
+    pattern) since the download-authorization check needed to distinguish
+    "owning student" from "assigned supervisor" without a second DB round
+    trip for role.
+  - `httpserver.NewRouter` signature changed to `(*gin.Engine, error)` since
+    router setup now creates the storage directory on boot; `cmd/api`
+    updated to handle the error.
+  - Full backend test coverage (new `dailyreports` package: sequential
+    approval, unassigned-supervisor/wrong-student download rejection,
+    duplicate-date rejection, no-active-practicum rejection); verified live
+    end-to-end via curl (PDF upload → premature faculty review correctly
+    rejected → agency approve → faculty approve → authenticated download
+    succeeds → unauthenticated download 401s → pending list empties).
+  - Mobile: added `expo-document-picker` (PDF picker), `expo-file-system` +
+    `expo-sharing` (native file download/open — the file endpoint requires
+    an `Authorization` header, so it can't be a plain link; see
+    `lib/open-file.ts`, which branches web-blob-URL vs native-download).
+    Added `apiUpload` to `lib/api-client.ts` for multipart bodies (kept
+    separate from `apiRequest` — multipart must not be JSON-encoded or have
+    a manually-set `Content-Type`). Student and supervisor "Activities" tabs
+    (renamed "Daily Reports" in the tab bar; route filenames unchanged)
+    replaced entirely — upload form + status list on the student side,
+    review queue with a file-view action on the supervisor side. `npx tsc
+    --noEmit`, `npm run lint`, and `npx expo export --platform web` all
+    clean.
+
 ### In progress
-_(nothing currently — gap-fill complete, Phase 5 not yet started)_
+_(nothing currently — gap-fill and daily report file upload complete, Phase 5 not yet started)_
 
 ### Not started
-- **Daily Report file upload** (deferred from the rework above — see Done).
-  Needs: local-disk `storage.Storage` implementation, multipart upload
-  endpoint, mobile image picker (`expo-image-picker` or
-  `expo-document-picker`) + upload screen. Do this before or alongside
-  Phase 5, since Phase 5's "review daily records" workflow logically
-  includes reviewing these once they exist.
 - Phase 5 — Supervisor Workflows (review, verification, supervision records,
   feedback, evaluations)
 - Phase 6 — Competency System (framework is an open product decision — do not
@@ -319,6 +364,8 @@ environment" means "safe to expose to real users."
   `localhost:5433`, db/user/password all `fieldsync`.
 - Backend: `go run ./cmd/api` from `backend/`, listens on port **8090** (not
   8080 — same reason). Requires `backend/.env` (copy from `.env.example`).
+  Uploaded daily-report PDFs are written to `backend/data/uploads`
+  (`STORAGE_DIR`, gitignored) — safe to delete freely in dev.
 - Mobile: `npm start` from `mobile/`, press `w` for web or scan the QR with
   Expo Go (must be **SDK 54** — check Expo Go's supported version before
   bumping the Expo SDK). Requires `mobile/.env` with `EXPO_PUBLIC_API_URL` —

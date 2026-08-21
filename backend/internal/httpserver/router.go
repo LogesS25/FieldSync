@@ -10,22 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/fieldsync/backend/internal/activities"
 	"github.com/fieldsync/backend/internal/agencies"
 	"github.com/fieldsync/backend/internal/attendance"
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/config"
+	"github.com/fieldsync/backend/internal/dailyreports"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
 	"github.com/fieldsync/backend/internal/feedback"
 	"github.com/fieldsync/backend/internal/fieldworkcomponents"
 	"github.com/fieldsync/backend/internal/institutions"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
+	"github.com/fieldsync/backend/internal/storage"
 	"github.com/fieldsync/backend/internal/teamrequests"
 	"github.com/fieldsync/backend/internal/users"
 )
 
-func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
+func NewRouter(pool *pgxpool.Pool, cfg *config.Config) (*gin.Engine, error) {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -55,12 +56,17 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 
 	practicumsService := practicums.NewService(queries)
 	practicums.NewHandler(practicumsService).RegisterRoutes(r, cfg.JWTSecret)
-	activities.NewHandler(activities.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 	attendance.NewHandler(attendance.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 	reports.NewHandler(reports.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 	teamrequests.NewHandler(teamrequests.NewService(queries, practicumsService)).RegisterRoutes(r, cfg.JWTSecret)
 
-	return r
+	store, err := storage.New(cfg.StorageDir)
+	if err != nil {
+		return nil, err
+	}
+	dailyreports.NewHandler(dailyreports.NewService(queries, practicumsService, store)).RegisterRoutes(r, cfg.JWTSecret)
+
+	return r, nil
 }
 
 func healthHandler(pool *pgxpool.Pool) gin.HandlerFunc {

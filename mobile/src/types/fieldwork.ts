@@ -1,15 +1,6 @@
-export type VerificationStatus = 'pending' | 'verified' | 'rejected';
 export type ReviewDecision = 'pending' | 'approved' | 'rejected';
 export type AttendanceSession = 'morning' | 'evening';
 export type TeamRequestDecision = 'pending' | 'accepted' | 'rejected';
-
-export interface FieldActivity {
-  id: string;
-  practicumId: string;
-  activityDate: string;
-  description: string;
-  verificationStatus: VerificationStatus;
-}
 
 export interface AttendanceRecord {
   id: string;
