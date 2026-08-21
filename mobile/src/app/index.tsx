@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { LogoutButton } from '@/components/logout-button';
+import { LoadingState } from '@/components/ui/loading-state';
 import { useAuthStore } from '@/stores/auth-store';
 
 // Entry redirect: unauthenticated users go to login, authenticated users go
@@ -18,7 +20,7 @@ export default function Index() {
     // through the login screen on every cold start.
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator />
+        <LoadingState />
       </View>
     );
   }
@@ -41,8 +43,11 @@ export default function Index() {
   // branch, an admin would bounce forever between "/" and the (supervisor)
   // group's RequireRole redirect back to "/".
   return (
-    <View className="flex-1 items-center justify-center bg-white px-6">
-      <Text className="text-center text-base font-medium text-slate-700">
+    <View className="flex-1 items-center justify-center bg-white px-8">
+      <View className="mb-4 h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+        <Ionicons name="construct-outline" size={22} color="#64748b" />
+      </View>
+      <Text className="text-center text-base font-semibold text-slate-800">
         Administrator accounts aren&apos;t supported in the mobile app yet.
       </Text>
       <Text className="mt-2 text-center text-sm text-slate-500">

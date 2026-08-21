@@ -1,11 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
 import { Text, View } from 'react-native';
 
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { ErrorState } from '@/components/ui/error-state';
 import { LabeledInput } from '@/components/ui/labeled-input';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { consolidatedReportSchema, type ConsolidatedReportFormValues } from '@/features/fieldwork/schemas';
@@ -22,7 +26,7 @@ const STATUS_TONE: Record<ReviewDecision, BadgeTone> = {
 export default function StudentReports() {
   const queryClient = useQueryClient();
 
-  const { data: report, isLoading } = useQuery({
+  const { data: report, isLoading, isError, refetch } = useQuery({
     queryKey: ['consolidated-report', 'me'],
     queryFn: reportsService.getMyConsolidatedReport,
   });
@@ -58,13 +62,17 @@ export default function StudentReports() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Consolidated Report</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        One report covers your whole fieldwork period. It can&apos;t be edited once submitted, and your agency
-        supervisor reviews it before your faculty supervisor does.
-      </Text>
+      <PageHeader
+        icon="bar-chart-outline"
+        title="Consolidated Report"
+        description="One report covers your whole fieldwork period. It can't be edited once submitted, and your agency supervisor reviews it before your faculty supervisor does."
+      />
 
-      {isLoading ? null : report ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : report ? (
         <View className="gap-4">
           <Card>
             <View className="mb-3 flex-row gap-2">
@@ -97,16 +105,20 @@ export default function StudentReports() {
                 )}
               />
               {resubmitMutation.isError ? (
-                <Text className="mb-2 text-sm text-red-600">
-                  {resubmitMutation.error instanceof ApiError
-                    ? resubmitMutation.error.message
-                    : 'Something went wrong. Please try again.'}
-                </Text>
+                <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+                  <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+                  <Text className="flex-1 text-sm text-rose-600">
+                    {resubmitMutation.error instanceof ApiError
+                      ? resubmitMutation.error.message
+                      : 'Something went wrong. Please try again.'}
+                  </Text>
+                </View>
               ) : null}
               <PrimaryButton
-                label={resubmitMutation.isPending ? 'Resubmitting…' : 'Resubmit Report'}
+                label="Resubmit Report"
                 onPress={onResubmit}
                 disabled={resubmitMutation.isPending}
+                loading={resubmitMutation.isPending}
               />
             </Card>
           ) : null}
@@ -130,16 +142,20 @@ export default function StudentReports() {
             )}
           />
           {mutation.isError ? (
-            <Text className="mb-2 text-sm text-red-600">
-              {mutation.error instanceof ApiError && mutation.error.status === 409
-                ? 'A report has already been submitted, or you have no active practicum.'
-                : 'Something went wrong. Please try again.'}
-            </Text>
+            <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+              <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+              <Text className="flex-1 text-sm text-rose-600">
+                {mutation.error instanceof ApiError && mutation.error.status === 409
+                  ? 'A report has already been submitted, or you have no active practicum.'
+                  : 'Something went wrong. Please try again.'}
+              </Text>
+            </View>
           ) : null}
           <PrimaryButton
-            label={mutation.isPending ? 'Submitting…' : 'Submit Report'}
+            label="Submit Report"
             onPress={onSubmit}
             disabled={mutation.isPending}
+            loading={mutation.isPending}
           />
         </Card>
       )}

@@ -5,10 +5,16 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, Text, View } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { DateInput } from '@/components/ui/date-input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { FormField } from '@/components/ui/form-field';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { dailyReportSchema, type DailyReportFormValues } from '@/features/fieldwork/schemas';
@@ -32,7 +38,7 @@ export default function StudentDailyReports() {
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['daily-reports', 'mine'],
     queryFn: dailyReportsService.listMyDailyReports,
   });
@@ -86,11 +92,11 @@ export default function StudentDailyReports() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Daily Reports</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        Upload your handwritten fieldwork report for the day as a PDF. Your agency supervisor reviews it before your
-        faculty supervisor does.
-      </Text>
+      <PageHeader
+        icon="document-text-outline"
+        title="Daily Reports"
+        description="Upload your handwritten fieldwork report for the day as a PDF. Your agency supervisor reviews it before your faculty supervisor does."
+      />
 
       <Card className="mb-6">
         <Controller
@@ -101,30 +107,51 @@ export default function StudentDailyReports() {
           )}
         />
 
-        <Text className="mb-1 text-sm font-medium text-slate-700">Report file</Text>
-        <Pressable
-          onPress={pickFile}
-          className="mb-1 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3"
-        >
-          <Text className="text-sm text-slate-600">{pickedFile ? pickedFile.name : 'Choose a PDF…'}</Text>
-        </Pressable>
-        {pickerError ? <Text className="mb-2 text-sm text-red-600">{pickerError}</Text> : null}
+        <FormField label="Report file" error={pickerError ?? undefined}>
+          <Pressable
+            onPress={pickFile}
+            className={`flex-row items-center gap-2 rounded-xl border border-dashed px-4 py-3.5 active:opacity-70 ${
+              pickedFile ? 'border-brand-300 bg-brand-50' : 'border-slate-300 bg-slate-50'
+            }`}
+          >
+            <Ionicons
+              name={pickedFile ? 'document-attach-outline' : 'cloud-upload-outline'}
+              size={18}
+              color={pickedFile ? '#4338ca' : '#94a3b8'}
+            />
+            <Text className={`text-sm ${pickedFile ? 'font-medium text-brand-700' : 'text-slate-500'}`}>
+              {pickedFile ? pickedFile.name : 'Choose a PDF…'}
+            </Text>
+          </Pressable>
+        </FormField>
 
         {mutation.isError ? (
-          <Text className="mb-2 mt-2 text-sm text-red-600">
-            {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
-          </Text>
+          <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+            <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+            <Text className="flex-1 text-sm text-rose-600">
+              {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
+            </Text>
+          </View>
         ) : null}
 
         <PrimaryButton
-          label={mutation.isPending ? 'Submitting…' : 'Submit Report'}
+          label="Submit Report"
           onPress={onSubmit}
           disabled={mutation.isPending}
+          loading={mutation.isPending}
         />
       </Card>
 
-      {isLoading ? null : !data || data.length === 0 ? (
-        <EmptyState title="No reports submitted yet" description="Reports you submit will show up here." />
+      {isLoading ? (
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : !data || data.length === 0 ? (
+        <EmptyState
+          icon="document-text-outline"
+          title="No reports submitted yet"
+          description="Reports you submit will show up here."
+        />
       ) : (
         <View className="gap-3">
           {data.map((report) => (
@@ -146,8 +173,9 @@ function ReportCard({ report, onView }: { report: DailyReport; onView: () => voi
           <Badge label={`Faculty: ${report.facultyStatus}`} tone={STATUS_TONE[report.facultyStatus]} />
         </View>
       </View>
-      <Pressable onPress={onView}>
-        <Text className="text-sm text-brand-600">{report.filename}</Text>
+      <Pressable onPress={onView} className="flex-row items-center gap-1.5 self-start active:opacity-70">
+        <Ionicons name="document-attach-outline" size={14} color="#4f46e5" />
+        <Text className="text-sm font-medium text-brand-600">{report.filename}</Text>
       </Pressable>
     </Card>
   );

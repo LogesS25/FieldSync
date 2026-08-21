@@ -1,8 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { openAuthenticatedFile } from '@/lib/open-file';
@@ -16,7 +20,7 @@ export default function SupervisorDailyReports() {
   const user = useAuthStore((state) => state.user);
   const isAgency = user?.role === 'agency_supervisor';
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['daily-reports', 'pending'],
     queryFn: dailyReportsService.listPendingDailyReports,
   });
@@ -40,20 +44,30 @@ export default function SupervisorDailyReports() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Daily Reports</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        {isAgency ? 'Review before the faculty supervisor does.' : 'Already approved by the agency supervisor.'}
-      </Text>
+      <PageHeader
+        icon="document-text-outline"
+        title="Daily Reports"
+        description={isAgency ? 'Review before the faculty supervisor does.' : 'Already approved by the agency supervisor.'}
+      />
 
-      {isLoading ? null : !data || data.length === 0 ? (
-        <EmptyState title="Nothing to review" description="Reports awaiting your approval will show up here." />
+      {isLoading ? (
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : !data || data.length === 0 ? (
+        <EmptyState
+          icon="checkmark-done-outline"
+          title="Nothing to review"
+          description="Reports awaiting your approval will show up here."
+        />
       ) : (
         <View className="gap-3">
           {data.map((report) => (
             <Card key={report.id}>
               <Text className="mb-1 font-medium text-slate-800">{report.reportDate}</Text>
-              <Pressable onPress={() => viewFile(report)} className="mb-3">
-                <Text className="text-sm text-brand-600">{report.filename}</Text>
+              <Pressable onPress={() => viewFile(report)} className="mb-3 flex-row items-center gap-1.5 self-start active:opacity-70">
+                <Ionicons name="document-attach-outline" size={14} color="#4f46e5" />
+                <Text className="text-sm font-medium text-brand-600">{report.filename}</Text>
               </Pressable>
               <View className="flex-row gap-3">
                 <View className="flex-1">

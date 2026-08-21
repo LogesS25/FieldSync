@@ -1,13 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { DateInput } from '@/components/ui/date-input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { FormField } from '@/components/ui/form-field';
 import { LabeledInput } from '@/components/ui/labeled-input';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { PillSelect } from '@/components/ui/pill-select';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { teamRequestSchema, type TeamRequestFormValues } from '@/features/fieldwork/schemas';
@@ -85,13 +90,14 @@ export default function StudentTeam() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Your Practicum Team</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        Pick an agency and both supervisors. Your team forms once both accept.
-      </Text>
+      <PageHeader
+        icon="people-circle-outline"
+        title="Your Practicum Team"
+        description="Pick an agency and both supervisors. Your team forms once both accept."
+      />
 
       {requestsLoading ? (
-        <ActivityIndicator className="mb-6" color="#4f46e5" />
+        <LoadingState compact />
       ) : requests && requests.length > 0 ? (
         <View className="mb-6 gap-3">
           {requests.map((request) => (
@@ -101,120 +107,88 @@ export default function StudentTeam() {
       ) : null}
 
       {hasFormedTeam ? (
-        <EmptyState title="Your team is formed" description="You already have an active practicum team." />
+        <EmptyState
+          icon="people-circle-outline"
+          title="Your team is formed"
+          description="You already have an active practicum team."
+        />
       ) : (
         <Card>
-          <Text className="mb-1 text-sm font-medium text-slate-700">Agency</Text>
-          {agenciesLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="agencyId"
-              render={({ field: { onChange, value } }) => (
-                <View className="mb-1 flex-row flex-wrap gap-2">
-                  {(agencies ?? []).map((agency) => (
-                    <Pressable
-                      key={agency.id}
-                      onPress={() => onChange(agency.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === agency.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === agency.id ? 'text-white' : 'text-slate-700'}>{agency.name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.agencyId ? <Text className="mb-2 text-sm text-red-600">{errors.agencyId.message}</Text> : null}
+          <FormField label="Agency" error={errors.agencyId?.message}>
+            {agenciesLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="agencyId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(agencies ?? []).map((agency) => ({ value: agency.id, label: agency.name }))}
+                    value={value}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
 
-          <Text className="mb-1 mt-2 text-sm font-medium text-slate-700">Faculty Supervisor</Text>
-          {facultyLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="facultySupervisorId"
-              render={({ field: { onChange, value } }) => (
-                <View className="mb-1 flex-row flex-wrap gap-2">
-                  {(facultyList ?? []).map((faculty) => (
-                    <Pressable
-                      key={faculty.id}
-                      onPress={() => onChange(faculty.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === faculty.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === faculty.id ? 'text-white' : 'text-slate-700'}>{faculty.fullName}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.facultySupervisorId ? (
-            <Text className="mb-2 text-sm text-red-600">{errors.facultySupervisorId.message}</Text>
-          ) : null}
+          <FormField label="Faculty Supervisor" error={errors.facultySupervisorId?.message}>
+            {facultyLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="facultySupervisorId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(facultyList ?? []).map((faculty) => ({ value: faculty.id, label: faculty.fullName }))}
+                    value={value}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
 
-          <Text className="mb-1 mt-2 text-sm font-medium text-slate-700">Agency Supervisor</Text>
-          {!selectedAgencyId ? (
-            <Text className="mb-2 text-sm text-slate-400">Pick an agency first.</Text>
-          ) : agencySupervisorsLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="agencySupervisorId"
-              render={({ field: { onChange, value } }) => (
-                <View className="mb-1 flex-row flex-wrap gap-2">
-                  {(agencySupervisors ?? []).map((sup) => (
-                    <Pressable
-                      key={sup.id}
-                      onPress={() => onChange(sup.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === sup.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === sup.id ? 'text-white' : 'text-slate-700'}>{sup.fullName}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.agencySupervisorId ? (
-            <Text className="mb-2 text-sm text-red-600">{errors.agencySupervisorId.message}</Text>
-          ) : null}
+          <FormField
+            label="Agency Supervisor"
+            error={errors.agencySupervisorId?.message}
+            hint={!selectedAgencyId ? 'Pick an agency first.' : undefined}
+          >
+            {!selectedAgencyId ? null : agencySupervisorsLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="agencySupervisorId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(agencySupervisors ?? []).map((sup) => ({ value: sup.id, label: sup.fullName }))}
+                    value={value}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
 
-          <Text className="mb-1 mt-2 text-sm font-medium text-slate-700">Fieldwork Component</Text>
-          {componentsLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="fieldworkComponentId"
-              render={({ field: { onChange, value } }) => (
-                <View className="mb-1 flex-row flex-wrap gap-2">
-                  {(components ?? []).map((component) => (
-                    <Pressable
-                      key={component.id}
-                      onPress={() => onChange(component.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === component.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === component.id ? 'text-white' : 'text-slate-700'}>{component.name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.fieldworkComponentId ? (
-            <Text className="mb-2 text-sm text-red-600">{errors.fieldworkComponentId.message}</Text>
-          ) : null}
+          <FormField label="Fieldwork Component" error={errors.fieldworkComponentId?.message}>
+            {componentsLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="fieldworkComponentId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(components ?? []).map((component) => ({ value: component.id, label: component.name }))}
+                    value={value}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
 
           <Controller
             control={control}
@@ -242,15 +216,19 @@ export default function StudentTeam() {
           />
 
           {mutation.isError ? (
-            <Text className="mb-2 text-sm text-red-600">
-              {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
-            </Text>
+            <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+              <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+              <Text className="flex-1 text-sm text-rose-600">
+                {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
+              </Text>
+            </View>
           ) : null}
 
           <PrimaryButton
-            label={mutation.isPending ? 'Sending…' : 'Send Team Request'}
+            label="Send Team Request"
             onPress={onSubmit}
             disabled={mutation.isPending}
+            loading={mutation.isPending}
           />
         </Card>
       )}
@@ -270,13 +248,17 @@ function FeedbackReceived() {
 
   return (
     <View>
-      <Text className="mb-1 text-lg font-bold text-slate-900">Weekly Feedback</Text>
+      <Text className="mb-1 text-base font-bold text-slate-900">Weekly Feedback</Text>
       <Text className="mb-4 text-sm text-slate-500">Feedback from your supervisors, most recent first.</Text>
 
       {isLoading ? (
-        <ActivityIndicator color="#4f46e5" />
+        <LoadingState compact />
       ) : !feedback || feedback.length === 0 ? (
-        <EmptyState title="No feedback yet" description="Your supervisors' weekly feedback will show up here." />
+        <EmptyState
+          icon="chatbubble-ellipses-outline"
+          title="No feedback yet"
+          description="Your supervisors' weekly feedback will show up here."
+        />
       ) : (
         <View className="gap-3">
           {[...feedback]

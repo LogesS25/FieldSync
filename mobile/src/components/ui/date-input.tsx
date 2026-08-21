@@ -1,4 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Modal, Platform, Pressable, Text, View } from 'react-native';
 
@@ -38,17 +39,23 @@ export function DateInput({ label, value, onChange, error }: DateInputProps) {
   };
 
   const trigger = (
-    <Pressable onPress={openPicker} className="rounded-lg border border-slate-300 bg-white px-4 py-3">
+    <Pressable
+      onPress={openPicker}
+      className={`flex-row items-center justify-between rounded-xl border bg-white px-4 py-3.5 ${
+        error ? 'border-rose-300' : 'border-slate-200'
+      }`}
+    >
       <Text className={value ? 'text-slate-900' : 'text-slate-400'}>{value ? formatDisplay(value) : 'Select date'}</Text>
+      <Ionicons name="calendar-outline" size={17} color="#94a3b8" />
     </Pressable>
   );
 
   if (Platform.OS === 'android') {
     return (
-      <View className="mb-3">
-        <Text className="mb-1 text-sm font-medium text-slate-700">{label}</Text>
+      <View className="mb-4">
+        <Text className="mb-2 text-sm font-medium text-slate-700">{label}</Text>
         {trigger}
-        {error ? <Text className="mt-1 text-sm text-red-600">{error}</Text> : null}
+        {error ? <Text className="mt-1.5 text-sm text-red-600">{error}</Text> : null}
         {show ? (
           <DateTimePicker
             value={draft}
@@ -67,10 +74,10 @@ export function DateInput({ label, value, onChange, error }: DateInputProps) {
   }
 
   return (
-    <View className="mb-3">
-      <Text className="mb-1 text-sm font-medium text-slate-700">{label}</Text>
+    <View className="mb-4">
+      <Text className="mb-2 text-sm font-medium text-slate-700">{label}</Text>
       {trigger}
-      {error ? <Text className="mt-1 text-sm text-red-600">{error}</Text> : null}
+      {error ? <Text className="mt-1.5 text-sm text-red-600">{error}</Text> : null}
 
       <Modal visible={show} transparent animationType="fade" onRequestClose={() => setShow(false)}>
         <View className="flex-1 items-center justify-end bg-black/40">
@@ -92,7 +99,7 @@ export function DateInput({ label, value, onChange, error }: DateInputProps) {
                   onChange(formatISO(draft));
                   setShow(false);
                 }}
-                className="rounded-lg bg-brand-600 px-4 py-2"
+                className="rounded-xl bg-brand-600 px-5 py-2.5 active:bg-brand-700"
               >
                 <Text className="font-semibold text-white">Done</Text>
               </Pressable>

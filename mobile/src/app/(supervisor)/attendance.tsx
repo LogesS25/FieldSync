@@ -3,6 +3,9 @@ import { Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import * as attendanceService from '@/services/attendance';
@@ -13,7 +16,7 @@ export default function SupervisorAttendance() {
   const user = useAuthStore((state) => state.user);
   const isAgency = user?.role === 'agency_supervisor';
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['attendance', 'pending'],
     queryFn: attendanceService.listPendingAttendance,
   });
@@ -26,13 +29,24 @@ export default function SupervisorAttendance() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Attendance Review</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        {isAgency ? 'Review attendance before it goes to the faculty supervisor.' : 'Attendance already approved by the agency supervisor.'}
-      </Text>
+      <PageHeader
+        icon="checkmark-done-circle-outline"
+        title="Attendance Review"
+        description={
+          isAgency ? 'Review attendance before it goes to the faculty supervisor.' : 'Attendance already approved by the agency supervisor.'
+        }
+      />
 
-      {isLoading ? null : !data || data.length === 0 ? (
-        <EmptyState title="Nothing to review" description="Attendance awaiting your approval will show up here." />
+      {isLoading ? (
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : !data || data.length === 0 ? (
+        <EmptyState
+          icon="checkmark-done-outline"
+          title="Nothing to review"
+          description="Attendance awaiting your approval will show up here."
+        />
       ) : (
         <View className="gap-3">
           {data.map((record) => (

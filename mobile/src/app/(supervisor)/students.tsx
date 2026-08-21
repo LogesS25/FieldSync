@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, FlatList, Text, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import * as practicumService from '@/services/practicums';
 import type { AssignedStudent, PracticumStatus } from '@/types/practicum';
@@ -16,24 +19,26 @@ const STATUS_TONE: Record<PracticumStatus, BadgeTone> = {
 };
 
 export default function SupervisorStudents() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['students'],
     queryFn: practicumService.listMyStudents,
   });
 
   return (
     <ScreenContainer>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Your Students</Text>
-      <Text className="mb-6 text-sm text-slate-500">
-        {data ? `${data.length} student${data.length === 1 ? '' : 's'} assigned to you` : ' '}
-      </Text>
+      <PageHeader
+        icon="people-outline"
+        title="Your Students"
+        description={data ? `${data.length} student${data.length === 1 ? '' : 's'} assigned to you` : ' '}
+      />
 
       {isLoading ? (
-        <View className="items-center py-10">
-          <ActivityIndicator color="#4f46e5" />
-        </View>
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
       ) : !data || data.length === 0 ? (
         <EmptyState
+          icon="people-outline"
           title="No students assigned yet"
           description="Students will appear here once an administrator assigns you to their practicum."
         />

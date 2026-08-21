@@ -1,13 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { DateInput } from '@/components/ui/date-input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { FormField } from '@/components/ui/form-field';
 import { LabeledInput } from '@/components/ui/labeled-input';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
+import { PillSelect } from '@/components/ui/pill-select';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ScreenContainer } from '@/components/ui/screen-container';
 import { feedbackSchema, type FeedbackFormValues } from '@/features/fieldwork/schemas';
@@ -21,7 +27,7 @@ export default function SupervisorTeamRequests() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['team-requests', 'pending'],
     queryFn: teamRequestsService.listPendingTeamRequests,
   });
@@ -41,11 +47,22 @@ export default function SupervisorTeamRequests() {
 
   return (
     <ScreenContainer scroll>
-      <Text className="mb-1 text-2xl font-bold text-slate-900">Team Requests</Text>
-      <Text className="mb-6 text-sm text-slate-500">Students requesting you as a supervisor.</Text>
+      <PageHeader
+        icon="people-circle-outline"
+        title="Team Requests"
+        description="Students requesting you as a supervisor."
+      />
 
-      {isLoading ? null : pending.length === 0 ? (
-        <EmptyState title="No pending requests" description="Requests naming you as a supervisor will show up here." />
+      {isLoading ? (
+        <LoadingState />
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : pending.length === 0 ? (
+        <EmptyState
+          icon="people-circle-outline"
+          title="No pending requests"
+          description="Requests naming you as a supervisor will show up here."
+        />
       ) : (
         <View className="gap-3">
           {pending.map((request) => (
@@ -116,33 +133,22 @@ function WeeklyFeedbackForm() {
 
   return (
     <Card>
-      <Text className="mb-1 text-base font-semibold text-slate-900">Weekly Feedback</Text>
+      <Text className="mb-1 text-base font-bold text-slate-900">Weekly Feedback</Text>
       <Text className="mb-4 text-sm text-slate-500">
         Give each student feedback for the week. This is required every weekend.
       </Text>
 
-      <Text className="mb-1 text-sm font-medium text-slate-700">Student</Text>
-      {studentsLoading ? null : !students || students.length === 0 ? (
-        <Text className="mb-2 text-sm text-slate-400">No students assigned yet.</Text>
-      ) : (
-        <View className="mb-3 flex-row flex-wrap gap-2">
-          {students.map((student) => (
-            <Pressable
-              key={student.practicumId}
-              onPress={() => setSelectedPracticumId(student.practicumId)}
-              className={`rounded-full border px-4 py-2 ${
-                selectedPracticumId === student.practicumId
-                  ? 'border-brand-600 bg-brand-600'
-                  : 'border-slate-300 bg-white'
-              }`}
-            >
-              <Text className={selectedPracticumId === student.practicumId ? 'text-white' : 'text-slate-700'}>
-                {student.studentName}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
+      <FormField label="Student" hint={!studentsLoading && (!students || students.length === 0) ? 'No students assigned yet.' : undefined}>
+        {studentsLoading ? (
+          <LoadingState compact />
+        ) : students && students.length > 0 ? (
+          <PillSelect
+            options={students.map((student) => ({ value: student.practicumId, label: student.studentName }))}
+            value={selectedPracticumId ?? ''}
+            onChange={setSelectedPracticumId}
+          />
+        ) : null}
+      </FormField>
 
       <Controller
         control={control}
@@ -169,20 +175,27 @@ function WeeklyFeedbackForm() {
         )}
       />
 
-      {!selectedPracticumId ? (
-        <Text className="mb-2 text-sm text-slate-400">Pick a student first.</Text>
-      ) : null}
+      {!selectedPracticumId ? <Text className="mb-3 text-sm text-slate-400">Pick a student first.</Text> : null}
       {mutation.isError ? (
-        <Text className="mb-2 text-sm text-red-600">
-          {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
-        </Text>
+        <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+          <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+          <Text className="flex-1 text-sm text-rose-600">
+            {mutation.error instanceof ApiError ? mutation.error.message : 'Something went wrong. Please try again.'}
+          </Text>
+        </View>
       ) : null}
-      {mutation.isSuccess ? <Text className="mb-2 text-sm text-emerald-600">Feedback submitted.</Text> : null}
+      {mutation.isSuccess ? (
+        <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3">
+          <Ionicons name="checkmark-circle-outline" size={16} color="#059669" />
+          <Text className="text-sm font-medium text-emerald-700">Feedback submitted.</Text>
+        </View>
+      ) : null}
 
       <PrimaryButton
-        label={mutation.isPending ? 'Submitting…' : 'Submit Feedback'}
+        label="Submit Feedback"
         onPress={onSubmit}
         disabled={mutation.isPending || !selectedPracticumId}
+        loading={mutation.isPending}
       />
     </Card>
   );

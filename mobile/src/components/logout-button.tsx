@@ -1,9 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text } from 'react-native';
 
 import * as authService from '@/services/auth';
 import { useAuthStore } from '@/stores/auth-store';
 
-export function LogoutButton() {
+interface LogoutButtonProps {
+  fullWidth?: boolean;
+}
+
+export function LogoutButton({ fullWidth }: LogoutButtonProps = {}) {
   const refreshToken = useAuthStore((state) => state.refreshToken);
   const clearSession = useAuthStore((state) => state.clearSession);
 
@@ -17,8 +22,12 @@ export function LogoutButton() {
   };
 
   return (
-    <Pressable className="mt-6 rounded-lg border border-slate-300 px-4 py-2" onPress={handleLogout}>
-      <Text className="text-slate-700">Sign out</Text>
+    <Pressable
+      className={`flex-row items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 active:opacity-70 ${fullWidth ? 'w-full' : 'self-start'}`}
+      onPress={handleLogout}
+    >
+      <Ionicons name="log-out-outline" size={17} color="#e11d48" />
+      <Text className="text-sm font-semibold text-rose-600">Sign out</Text>
     </Pressable>
   );
 }

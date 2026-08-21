@@ -69,6 +69,28 @@ implementing real functionality is not exempt from this.
   not flashy/gimmicky.
 - Loading, empty, and error states are part of the design, not an
   afterthought bolted on later.
+- **Navigation is a Drawer (sidebar), not bottom Tabs** — changed 2026-08-21
+  after explicit user feedback that bottom tabs with 8 items were unusable
+  ("too many tabs... too much for user to find what is theirs"). Both role
+  layouts (`(student)/_layout.tsx`, `(supervisor)/_layout.tsx`) use
+  `expo-router/drawer`'s `Drawer`, with a shared `useDrawerScreenOptions()`
+  hook (`lib/use-drawer-screen-options.ts`) that makes the sidebar a
+  slide-out overlay under 768px width and a permanently visible rail at or
+  above it — do not add a bottom tab bar again.
+- **Reuse the shared form/state components before writing new markup.**
+  `components/ui/` now has, beyond the original set:
+  `PageHeader` (icon + title + description — the in-body header every real
+  screen uses instead of raw `text-2xl` blocks, since the Drawer's top bar
+  already carries the route name), `PillSelect` (the recurring "pick one of
+  a few" control — role/agency/supervisor/session/student pickers),
+  `FormField` (label+error/hint wrapper for non-`TextInput` controls, pairs
+  with `PillSelect`/`DateInput`), `LoadingState` and `ErrorState` (every
+  query on a real screen should render both, not just the empty-data case —
+  before this pass most screens silently showed "nothing here" on a network
+  error, which is misleading), and `StatCard` (dashboard summary tiles).
+  `components/nav-sidebar.tsx` (`NavSidebar`) is the Drawer's
+  `drawerContent` — extend its `ROUTE_ICONS` map when adding a route rather
+  than duplicating sidebar markup elsewhere.
 
 ---
 
@@ -275,8 +297,48 @@ implementing real functionality is not exempt from this.
     --noEmit`, `npm run lint`, and `npx expo export --platform web` all
     clean.
 
+- **Mobile navigation & design rework (2026-08-21)** — full redesign pass
+  across the mobile app, not a new feature. User feedback was direct: bottom
+  tabs (8 items per role) were unusable, and the visual design needed to be
+  "immersive" and "attractive," not just functional. Scope was navigation +
+  every screen's loading/error/empty states + spacing, explicitly **not**
+  new business logic — see the "Mobile design" standard above for the
+  Drawer-navigation and shared-component rules this pass established.
+  - Replaced `Tabs` with `expo-router/drawer`'s `Drawer` in both
+    `(student)/_layout.tsx` and `(supervisor)/_layout.tsx`; added
+    `@react-navigation/drawer` and wrapped the root layout in
+    `GestureHandlerRootView` (required for the drawer's gestures — silently
+    no-ops without it). New `components/nav-sidebar.tsx` (branded header,
+    icon nav list with active-state highlighting, user card + sign-out at
+    the bottom) is the shared `drawerContent` for both roles.
+  - New shared components (`components/ui/`): `PageHeader`, `PillSelect`,
+    `FormField`, `LoadingState`, `ErrorState`, `StatCard` — see the "Mobile
+    design" standard above for what each replaces. Existing components
+    polished to match (`Card`, `Badge`, `PrimaryButton` — gained a `loading`
+    spinner state and an `outline` variant, `EmptyState` — gained an icon,
+    `LabeledInput`/`DateInput` — rounded-xl, consistent border/spacing).
+    `LogoutButton` gained a `fullWidth` prop for its new home in the sidebar
+    footer.
+  - Every real (non-placeholder) screen rewritten: both dashboards (the
+    supervisor dashboard was a bare placeholder before this — it's now a
+    real stat-card summary of assigned students + pending review counts,
+    linking into each queue), daily reports, attendance, consolidated
+    reports, team/supervision, students list, evaluations — all now handle
+    the query-error case explicitly via `ErrorState` with retry, not just
+    loading/empty. Placeholder screens (competencies, notifications,
+    resources — still Phase 6/7, not built) restyled via a redesigned
+    `ScreenPlaceholder` so an unbuilt screen still looks intentional.
+    Auth screens (login/register) redesigned with a consistent brand mark
+    and the new shared components.
+  - Verified via `npx tsc --noEmit`, `npm run lint`, `npx expo export
+    --platform web` (all clean, 33 routes), and a live `expo start --web`
+    session bundled/served without runtime errors (console/log-checked —
+    the Chrome browser tool was unavailable in this environment for a
+    visual screenshot check, so this was not eyeballed in-browser; worth a
+    manual pass before considering this fully done).
+
 ### In progress
-_(nothing currently — gap-fill and daily report file upload complete, Phase 5 not yet started)_
+_(nothing currently — gap-fill, daily report file upload, and the navigation/design rework are complete; Phase 5 not yet started)_
 
 ### Not started
 - Phase 5 — Supervisor Workflows (review, verification, supervision records,

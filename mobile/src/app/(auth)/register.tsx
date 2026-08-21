@@ -1,10 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { FormField } from '@/components/ui/form-field';
 import { LabeledInput } from '@/components/ui/labeled-input';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PillSelect } from '@/components/ui/pill-select';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { registerSchema, type RegisterFormValues } from '@/features/auth/schemas';
 import { ApiError } from '@/lib/api-client';
@@ -59,150 +64,145 @@ export default function RegisterScreen() {
   const onSubmit = handleSubmit((values) => mutation.mutate(values));
 
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerClassName="justify-center px-6 py-12">
-      <Text className="mb-1 text-2xl font-semibold text-slate-900">Create your account</Text>
-      <Text className="mb-8 text-slate-500">Register as a Student or Supervisor.</Text>
+    <SafeAreaView className="flex-1 bg-white">
+      <ScrollView className="flex-1" contentContainerClassName="px-7 py-10">
+        <View className="mb-8 items-center">
+          <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-brand-600">
+            <Ionicons name="leaf-outline" size={26} color="#ffffff" />
+          </View>
+          <Text className="text-2xl font-bold text-slate-900">Create your account</Text>
+          <Text className="mt-1 text-center text-sm text-slate-500">Register as a Student or Supervisor</Text>
+        </View>
 
-      <Controller
-        control={control}
-        name="fullName"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <LabeledInput label="Full name" placeholder="Jane Doe" onBlur={onBlur} onChangeText={onChange} value={value} error={errors.fullName?.message} />
-        )}
-      />
+        <Controller
+          control={control}
+          name="fullName"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <LabeledInput
+              label="Full name"
+              placeholder="Jane Doe"
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              error={errors.fullName?.message}
+            />
+          )}
+        />
 
-      <Controller
-        control={control}
-        name="email"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <LabeledInput
-            label="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="you@university.edu"
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            error={errors.email?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="email"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <LabeledInput
+              label="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="you@university.edu"
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              error={errors.email?.message}
+            />
+          )}
+        />
 
-      <Controller
-        control={control}
-        name="password"
-        render={({ field: { onChange, onBlur, value } }) => (
-          <LabeledInput
-            label="Password"
-            autoCapitalize="none"
-            secureTextEntry
-            placeholder="At least 8 characters"
-            onBlur={onBlur}
-            onChangeText={onChange}
-            value={value}
-            error={errors.password?.message}
-          />
-        )}
-      />
+        <Controller
+          control={control}
+          name="password"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <LabeledInput
+              label="Password"
+              autoCapitalize="none"
+              secureTextEntry
+              placeholder="At least 8 characters"
+              onBlur={onBlur}
+              onChangeText={onChange}
+              value={value}
+              error={errors.password?.message}
+            />
+          )}
+        />
 
-      <Text className="mb-2 mt-3 text-sm font-medium text-slate-700">I am a</Text>
-      <Controller
-        control={control}
-        name="role"
-        render={({ field: { onChange, value } }) => (
-          <View className="mb-4 flex-row flex-wrap gap-2">
-            {ROLE_OPTIONS.map((option) => (
-              <Pressable
-                key={option.value}
-                onPress={() => {
-                  onChange(option.value);
+        <FormField label="I am a">
+          <Controller
+            control={control}
+            name="role"
+            render={({ field: { onChange, value } }) => (
+              <PillSelect
+                options={ROLE_OPTIONS}
+                value={value}
+                onChange={(next) => {
+                  onChange(next);
                   setValue('institutionId', '');
                   setValue('agencyId', '');
                 }}
-                className={`rounded-full border px-4 py-2 ${
-                  value === option.value ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                }`}
-              >
-                <Text className={value === option.value ? 'text-white' : 'text-slate-700'}>{option.label}</Text>
-              </Pressable>
-            ))}
+              />
+            )}
+          />
+        </FormField>
+
+        {needsInstitution ? (
+          <FormField label="University" error={errors.institutionId?.message}>
+            {institutionsLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="institutionId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(institutions ?? []).map((inst) => ({ value: inst.id, label: inst.name }))}
+                    value={value ?? ''}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
+        ) : null}
+
+        {needsAgency ? (
+          <FormField label="Agency" error={errors.agencyId?.message}>
+            {agenciesLoading ? (
+              <LoadingState compact />
+            ) : (
+              <Controller
+                control={control}
+                name="agencyId"
+                render={({ field: { onChange, value } }) => (
+                  <PillSelect
+                    options={(agencies ?? []).map((agency) => ({ value: agency.id, label: agency.name }))}
+                    value={value ?? ''}
+                    onChange={onChange}
+                  />
+                )}
+              />
+            )}
+          </FormField>
+        ) : null}
+
+        {mutation.isError ? (
+          <View className="mb-4 flex-row items-center gap-2 rounded-xl bg-rose-50 px-4 py-3">
+            <Ionicons name="alert-circle-outline" size={16} color="#e11d48" />
+            <Text className="flex-1 text-sm text-rose-600">
+              {mutation.error instanceof ApiError && mutation.error.status === 409
+                ? 'That email is already registered.'
+                : 'Something went wrong. Please try again.'}
+            </Text>
           </View>
-        )}
-      />
+        ) : null}
 
-      {needsInstitution ? (
-        <View className="mb-3">
-          <Text className="mb-1 text-sm font-medium text-slate-700">University</Text>
-          {institutionsLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="institutionId"
-              render={({ field: { onChange, value } }) => (
-                <View className="flex-row flex-wrap gap-2">
-                  {(institutions ?? []).map((inst) => (
-                    <Pressable
-                      key={inst.id}
-                      onPress={() => onChange(inst.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === inst.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === inst.id ? 'text-white' : 'text-slate-700'}>{inst.name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.institutionId ? <Text className="mt-1 text-sm text-red-600">{errors.institutionId.message}</Text> : null}
-        </View>
-      ) : null}
+        <PrimaryButton
+          label="Register"
+          onPress={onSubmit}
+          disabled={mutation.isPending}
+          loading={mutation.isPending}
+        />
 
-      {needsAgency ? (
-        <View className="mb-3">
-          <Text className="mb-1 text-sm font-medium text-slate-700">Agency</Text>
-          {agenciesLoading ? (
-            <ActivityIndicator />
-          ) : (
-            <Controller
-              control={control}
-              name="agencyId"
-              render={({ field: { onChange, value } }) => (
-                <View className="flex-row flex-wrap gap-2">
-                  {(agencies ?? []).map((agency) => (
-                    <Pressable
-                      key={agency.id}
-                      onPress={() => onChange(agency.id)}
-                      className={`rounded-full border px-4 py-2 ${
-                        value === agency.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={value === agency.id ? 'text-white' : 'text-slate-700'}>{agency.name}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            />
-          )}
-          {errors.agencyId ? <Text className="mt-1 text-sm text-red-600">{errors.agencyId.message}</Text> : null}
-        </View>
-      ) : null}
-
-      {mutation.isError ? (
-        <Text className="mb-2 text-sm text-red-600">
-          {mutation.error instanceof ApiError && mutation.error.status === 409
-            ? 'That email is already registered.'
-            : 'Something went wrong. Please try again.'}
-        </Text>
-      ) : null}
-
-      <PrimaryButton label={mutation.isPending ? 'Creating account…' : 'Register'} onPress={onSubmit} disabled={mutation.isPending} />
-
-      <Link href="/(auth)/login" className="mt-6 text-center text-brand-600">
-        Already have an account? Sign in
-      </Link>
-    </ScrollView>
+        <Link href="/(auth)/login" className="mt-6 text-center text-sm font-medium text-brand-600">
+          Already have an account? Sign in
+        </Link>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

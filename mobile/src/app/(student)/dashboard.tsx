@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
+import { LoadingState } from '@/components/ui/loading-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { ScreenContainer } from '@/components/ui/screen-container';
-import { LogoutButton } from '@/components/logout-button';
 import { ApiError } from '@/lib/api-client';
 import * as practicumService from '@/services/practicums';
 import { useAuthStore } from '@/stores/auth-store';
@@ -27,27 +29,32 @@ const STATUS_LABEL: Record<PracticumStatus, string> = {
 export default function StudentDashboard() {
   const user = useAuthStore((state) => state.user);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['practicums', 'me'],
     queryFn: practicumService.getMyPracticum,
     retry: (failureCount, err) => !(err instanceof ApiError && err.status === 404) && failureCount < 1,
   });
 
   const hasNoPracticum = error instanceof ApiError && error.status === 404;
+  const hasRealError = error && !hasNoPracticum;
 
   return (
     <ScreenContainer scroll>
-      <Text className="text-sm font-medium text-brand-600">Welcome back</Text>
-      <Text className="mb-6 text-2xl font-bold text-slate-900">{user?.fullName ?? 'Student'}</Text>
+      <PageHeader
+        icon="home-outline"
+        title={`Welcome back, ${user?.fullName?.split(' ')[0] ?? 'Student'}`}
+        description="Here's your practicum at a glance."
+      />
 
       {isLoading ? (
-        <View className="items-center py-10">
-          <ActivityIndicator color="#4f46e5" />
-        </View>
+        <LoadingState />
+      ) : hasRealError ? (
+        <ErrorState onRetry={() => refetch()} />
       ) : hasNoPracticum ? (
         <EmptyState
+          icon="people-circle-outline"
           title="No active practicum yet"
-          description="Send a team request from the Team tab once you've picked an agency and supervisors."
+          description="Send a team request from the Team screen once you've picked an agency and supervisors."
         />
       ) : data ? (
         <Card>
@@ -83,10 +90,6 @@ export default function StudentDashboard() {
           ) : null}
         </Card>
       ) : null}
-
-      <View className="mt-8 items-start">
-        <LogoutButton />
-      </View>
     </ScreenContainer>
   );
 }
