@@ -13,8 +13,10 @@ import { ScreenContainer } from '@/components/ui/screen-container';
 import { teamRequestSchema, type TeamRequestFormValues } from '@/features/fieldwork/schemas';
 import { ApiError } from '@/lib/api-client';
 import * as directoryService from '@/services/directory';
+import * as feedbackService from '@/services/feedback';
 import * as teamRequestsService from '@/services/teamrequests';
 import type { TeamRequest, TeamRequestDecision } from '@/types/fieldwork';
+import type { WeeklyFeedback } from '@/types/feedback';
 
 const DECISION_TONE: Record<TeamRequestDecision, BadgeTone> = {
   pending: 'warning',
@@ -42,6 +44,11 @@ export default function StudentTeam() {
     queryFn: teamRequestsService.listMyFacultySupervisors,
     enabled: !hasFormedTeam,
   });
+  const { data: components, isLoading: componentsLoading } = useQuery({
+    queryKey: ['fieldwork-components', 'mine'],
+    queryFn: directoryService.listMyFieldworkComponents,
+    enabled: !hasFormedTeam,
+  });
 
   const {
     control,
@@ -50,7 +57,14 @@ export default function StudentTeam() {
     formState: { errors },
   } = useForm<TeamRequestFormValues>({
     resolver: zodResolver(teamRequestSchema),
-    defaultValues: { agencyId: '', facultySupervisorId: '', agencySupervisorId: '', fieldworkDescription: '', startDate: '' },
+    defaultValues: {
+      agencyId: '',
+      facultySupervisorId: '',
+      agencySupervisorId: '',
+      fieldworkComponentId: '',
+      fieldworkDescription: '',
+      startDate: '',
+    },
   });
 
   const selectedAgencyId = watch('agencyId');
@@ -174,6 +188,34 @@ export default function StudentTeam() {
             <Text className="mb-2 text-sm text-red-600">{errors.agencySupervisorId.message}</Text>
           ) : null}
 
+          <Text className="mb-1 mt-2 text-sm font-medium text-slate-700">Fieldwork Component</Text>
+          {componentsLoading ? (
+            <ActivityIndicator />
+          ) : (
+            <Controller
+              control={control}
+              name="fieldworkComponentId"
+              render={({ field: { onChange, value } }) => (
+                <View className="mb-1 flex-row flex-wrap gap-2">
+                  {(components ?? []).map((component) => (
+                    <Pressable
+                      key={component.id}
+                      onPress={() => onChange(component.id)}
+                      className={`rounded-full border px-4 py-2 ${
+                        value === component.id ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      <Text className={value === component.id ? 'text-white' : 'text-slate-700'}>{component.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            />
+          )}
+          {errors.fieldworkComponentId ? (
+            <Text className="mb-2 text-sm text-red-600">{errors.fieldworkComponentId.message}</Text>
+          ) : null}
+
           <Controller
             control={control}
             name="fieldworkDescription"
@@ -212,7 +254,48 @@ export default function StudentTeam() {
           />
         </Card>
       )}
+
+      <View className="mt-8">
+        <FeedbackReceived />
+      </View>
     </ScreenContainer>
+  );
+}
+
+function FeedbackReceived() {
+  const { data: feedback, isLoading } = useQuery({
+    queryKey: ['feedback', 'me'],
+    queryFn: feedbackService.listFeedbackForMe,
+  });
+
+  return (
+    <View>
+      <Text className="mb-1 text-lg font-bold text-slate-900">Weekly Feedback</Text>
+      <Text className="mb-4 text-sm text-slate-500">Feedback from your supervisors, most recent first.</Text>
+
+      {isLoading ? (
+        <ActivityIndicator color="#4f46e5" />
+      ) : !feedback || feedback.length === 0 ? (
+        <EmptyState title="No feedback yet" description="Your supervisors' weekly feedback will show up here." />
+      ) : (
+        <View className="gap-3">
+          {[...feedback]
+            .sort((a, b) => b.weekStartDate.localeCompare(a.weekStartDate))
+            .map((entry) => (
+              <FeedbackCard key={entry.id} entry={entry} />
+            ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function FeedbackCard({ entry }: { entry: WeeklyFeedback }) {
+  return (
+    <Card>
+      <Text className="mb-2 text-xs font-medium text-slate-500">Week of {entry.weekStartDate}</Text>
+      <Text className="text-sm text-slate-700">{entry.feedback}</Text>
+    </Card>
   );
 }
 

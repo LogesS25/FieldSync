@@ -1,7 +1,7 @@
 -- name: CreateTeamRequest :one
 INSERT INTO practicum_team_requests
-    (student_id, institution_id, agency_id, faculty_supervisor_id, agency_supervisor_id, fieldwork_description, start_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+    (student_id, institution_id, agency_id, faculty_supervisor_id, agency_supervisor_id, fieldwork_component_id, fieldwork_description, start_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetTeamRequestByID :one

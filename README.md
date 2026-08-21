@@ -107,9 +107,16 @@ Agencies are university-scoped (`institutionId` required).
 - `POST /institutions`, `GET /institutions`
 - `POST /agencies` — body: `name`, `institutionId`; `GET /agencies`
 - `GET /agencies/mine` — agencies within the caller's own university.
+- `PATCH /agencies/:id`, `DELETE /agencies/:id` — university control over its
+  own agency list (body for `PATCH`: `name`).
 - `GET /faculty-supervisors/mine` (student) — faculty supervisors within the
   caller's own university.
 - `GET /agency-supervisors?agencyId=` — agency supervisors at a given agency.
+- `POST /fieldwork-components`, `GET /fieldwork-components` — body: `name`,
+  `institutionId`. `PATCH /fieldwork-components/:id`, `DELETE
+  /fieldwork-components/:id` — same university-control pattern as agencies.
+- `GET /fieldwork-components/mine` (student) — fieldwork components within
+  the caller's own university, for the team-request picker.
 
 ## Practicum Team Formation
 
@@ -120,7 +127,8 @@ admin-unilateral assignment flow entirely (see
 both supervisors accept.
 
 - `POST /team-requests` (student) — body: `agencyId`, `facultySupervisorId`,
-  `agencySupervisorId`, `fieldworkDescription`, `startDate`
+  `agencySupervisorId`, `fieldworkComponentId`, `fieldworkDescription`,
+  `startDate`. The component must belong to the student's own university.
 - `GET /team-requests/me` (student) — the student's own requests
 - `GET /team-requests/pending` (faculty/agency supervisor) — requests naming
   the caller, awaiting their decision
@@ -163,6 +171,22 @@ team, or returns `409 Conflict`.
 - `POST /consolidated-reports/:id/agency-review`,
   `POST /consolidated-reports/:id/faculty-review` — same sequential rule as
   attendance review.
+- `POST /consolidated-reports/:id/resubmit` (student) — body: `summary`.
+  Only valid once the report has been rejected by either reviewer; resets
+  both review statuses to pending and re-runs the same agency-then-faculty
+  approval sequence.
+
+## Feedback
+
+Mandatory weekly feedback from both assigned supervisors, tied to the
+practicum record (business requirements §12).
+
+- `POST /feedback` (faculty/agency supervisor) — body: `practicumId`,
+  `weekStartDate`, `feedback`. Requires the caller be an assigned supervisor
+  on that practicum; one entry per (practicum, supervisor, week).
+- `GET /feedback` (student) — all feedback from both supervisors across the
+  student's practicum(s).
+- `GET /feedback/mine` (supervisor) — feedback the caller has submitted.
 
 ## Development
 

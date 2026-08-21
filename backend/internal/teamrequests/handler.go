@@ -31,6 +31,7 @@ type createRequest struct {
 	AgencyID             string `json:"agencyId" binding:"required,uuid"`
 	FacultySupervisorID  string `json:"facultySupervisorId" binding:"required,uuid"`
 	AgencySupervisorID   string `json:"agencySupervisorId" binding:"required,uuid"`
+	FieldworkComponentID string `json:"fieldworkComponentId" binding:"required,uuid"`
 	FieldworkDescription string `json:"fieldworkDescription" binding:"required"`
 	StartDate            string `json:"startDate" binding:"required"`
 }
@@ -62,6 +63,11 @@ func (h *Handler) create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agencySupervisorId"})
 		return
 	}
+	fieldworkComponentID, err := db.ParseUUID(req.FieldworkComponentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid fieldworkComponentId"})
+		return
+	}
 	startDate, err := db.ParseDate(req.StartDate)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "startDate must be YYYY-MM-DD"})
@@ -73,6 +79,7 @@ func (h *Handler) create(c *gin.Context) {
 		AgencyID:             agencyID,
 		FacultySupervisorID:  facultyID,
 		AgencySupervisorID:   agencySupID,
+		FieldworkComponentID: fieldworkComponentID,
 		FieldworkDescription: req.FieldworkDescription,
 		StartDate:            startDate,
 	})
@@ -168,12 +175,12 @@ func respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrStudentNotFound), errors.Is(err, ErrAgencyNotFound),
 		errors.Is(err, ErrFacultyNotFound), errors.Is(err, ErrAgencySupNotFound),
-		errors.Is(err, ErrRequestNotFound):
+		errors.Is(err, ErrFieldworkComponentNotFound), errors.Is(err, ErrRequestNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrUserIsNotStudent), errors.Is(err, ErrStudentHasNoUniversity),
 		errors.Is(err, ErrAgencyWrongUniversity), errors.Is(err, ErrFacultyWrongRole),
 		errors.Is(err, ErrFacultyWrongUniversity), errors.Is(err, ErrAgencySupWrongRole),
-		errors.Is(err, ErrAgencySupWrongAgency):
+		errors.Is(err, ErrAgencySupWrongAgency), errors.Is(err, ErrFieldworkComponentWrongUniversity):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrNotYourRequest):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
@@ -193,6 +200,7 @@ func toResponse(r sqlcgen.PracticumTeamRequest) gin.H {
 		"agencyId":             db.UUIDToString(r.AgencyID),
 		"facultySupervisorId":  db.UUIDToString(r.FacultySupervisorID),
 		"agencySupervisorId":   db.UUIDToString(r.AgencySupervisorID),
+		"fieldworkComponentId": db.UUIDToString(r.FieldworkComponentID),
 		"fieldworkDescription": r.FieldworkDescription,
 		"startDate":            db.DateToStringPtr(r.StartDate),
 		"facultyDecision":      r.FacultyDecision,

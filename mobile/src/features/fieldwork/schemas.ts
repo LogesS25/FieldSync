@@ -31,7 +31,14 @@ export const teamRequestSchema = z.object({
   agencyId: z.string().min(1, 'Select an agency'),
   facultySupervisorId: z.string().min(1, 'Select a faculty supervisor'),
   agencySupervisorId: z.string().min(1, 'Select an agency supervisor'),
+  fieldworkComponentId: z.string().min(1, 'Select a fieldwork component'),
   fieldworkDescription: z.string().min(1, 'Describe the fieldwork'),
   startDate: isoDate,
 });
 export type TeamRequestFormValues = z.infer<typeof teamRequestSchema>;
+
+export const feedbackSchema = z.object({
+  weekStartDate: isoDate,
+  feedback: z.string().min(1, 'Feedback is required'),
+});
+export type FeedbackFormValues = z.infer<typeof feedbackSchema>;

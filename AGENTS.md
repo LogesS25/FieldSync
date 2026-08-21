@@ -181,8 +181,51 @@ implementing real functionality is not exempt from this.
     before (Phase 4 semantics), they just don't yet match the business
     doc's file-upload requirement.
 
+- **Business Model Rework gap-fill (2026-08-21)** — implements the four
+  concrete gaps left after the rework above. Migration `0006`:
+  - New `fieldwork_components` table (`institution_id`, `name`,
+    `UNIQUE(institution_id, name)`) + `internal/fieldworkcomponents` package:
+    full admin-gated CRUD (`POST/GET/PATCH/:id/DELETE /fieldwork-components`)
+    plus `GET /fieldwork-components/mine` (student, scoped to own
+    institution). `practicum_team_requests` gained a required
+    `fieldwork_component_id` FK — `teamrequests.CreateRequest` validates the
+    component exists and belongs to the student's own institution before
+    insert, rather than trusting the client-supplied ID.
+  - New `weekly_feedback` table (`practicum_id`, `supervisor_id`,
+    `week_start_date`, `feedback`, `UNIQUE(practicum_id, supervisor_id,
+    week_start_date)`) + `internal/feedback` package: either assigned
+    supervisor submits (`POST /feedback`, validated against
+    `SupervisorAssignmentExists` first), student reads all of theirs
+    (`GET /feedback`), supervisor reads their own submissions
+    (`GET /feedback/mine`).
+  - Consolidated-report resubmission: `Service.Resubmit` requires the report
+    belong to the caller and be currently rejected by at least one reviewer
+    (`ErrNotYourReport`/`ErrNotRejected`), then resets both review statuses
+    to pending and re-runs the same agency-then-faculty approval sequence.
+    Route: `POST /consolidated-reports/:id/resubmit`.
+  - University CRUD over its own reference lists: added `PATCH`/`DELETE
+    /agencies/:id` (admin-gated, scoped to the caller's institution).
+    Deliberately **not** built in this pass (flagged, not silently skipped):
+    attendance-requirements/checkbox-conditions/manuals CRUD (those entities
+    don't exist at all yet) and faculty-supervisor-list management (would
+    mean deactivating user accounts — a separate, larger decision).
+  - Full backend test coverage (new `fieldworkcomponents`/`feedback`
+    packages, extended `teamrequests`/`agencies`/`reports` tests); verified
+    live end-to-end via curl (component rename visible to student, team
+    request with component forms correctly, feedback POST visible to
+    student, reject→resubmit→re-approve cycle).
+  - Mobile: student "Team" screen gained a fieldwork-component picker
+    (same pill-list pattern as the other pickers on that screen); supervisor
+    "Supervision" screen gained a Weekly Feedback form (student picker +
+    `DateInput` week-start + text, using the shared components); student
+    "Team" screen gained a Weekly Feedback received list, most-recent-first;
+    student "Reports" screen gained a resubmit form that only appears when
+    the current report has been rejected by either reviewer. `npx tsc
+    --noEmit`, `npm run lint`, and `npx expo export --platform web` all
+    clean.
+
 ### In progress
-_(nothing currently — rework complete, Phase 5 not yet started)_
+_(nothing currently — gap-fill complete, Phase 5 not yet started)_
 
 ### Not started
 - **Daily Report file upload** (deferred from the rework above — see Done).

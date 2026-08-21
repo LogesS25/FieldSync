@@ -14,6 +14,10 @@ export async function getMyConsolidatedReport(): Promise<ConsolidatedReport | nu
   }
 }
 
+export function resubmitConsolidatedReport(id: string, summary: string): Promise<ConsolidatedReport> {
+  return apiRequest<ConsolidatedReport>(`/consolidated-reports/${id}/resubmit`, { method: 'POST', body: { summary } });
+}
+
 export function listPendingConsolidatedReports(): Promise<ConsolidatedReport[]> {
   return apiRequest<ConsolidatedReport[]>('/consolidated-reports/pending');
 }

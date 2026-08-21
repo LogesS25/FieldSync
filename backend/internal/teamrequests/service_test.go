@@ -50,11 +50,24 @@ func createScopedUser(t *testing.T, queries *sqlcgen.Queries, role sqlcgen.UserR
 	return user
 }
 
+func createFieldworkComponent(t *testing.T, queries *sqlcgen.Queries, institutionID pgtype.UUID) sqlcgen.FieldworkComponent {
+	t.Helper()
+	component, err := queries.CreateFieldworkComponent(context.Background(), sqlcgen.CreateFieldworkComponentParams{
+		InstitutionID: institutionID,
+		Name:          fmt.Sprintf("Test Component %d", time.Now().UnixNano()),
+	})
+	if err != nil {
+		t.Fatalf("CreateFieldworkComponent: %v", err)
+	}
+	return component
+}
+
 type testFixture struct {
 	svc         *teamrequests.Service
 	queries     *sqlcgen.Queries
 	institution sqlcgen.Institution
 	agency      sqlcgen.Agency
+	component   sqlcgen.FieldworkComponent
 	student     sqlcgen.User
 	faculty     sqlcgen.User
 	agencySup   sqlcgen.User
@@ -67,6 +80,7 @@ func newFixture(t *testing.T) testFixture {
 
 	institution := testutil.CreateTestInstitution(t, queries)
 	agency := testutil.CreateTestAgency(t, queries, institution.ID)
+	component := createFieldworkComponent(t, queries, institution.ID)
 
 	student := createScopedUser(t, queries, sqlcgen.UserRoleStudent, institution.ID, pgtype.UUID{})
 	faculty := createScopedUser(t, queries, sqlcgen.UserRoleFacultySupervisor, institution.ID, pgtype.UUID{})
@@ -77,23 +91,31 @@ func newFixture(t *testing.T) testFixture {
 		queries:     queries,
 		institution: institution,
 		agency:      agency,
+		component:   component,
 		student:     student,
 		faculty:     faculty,
 		agencySup:   agencySup,
 	}
 }
 
-func TestCreateRequest_Success(t *testing.T) {
-	f := newFixture(t)
-
-	request, err := f.svc.CreateRequest(context.Background(), teamrequests.CreateRequestInput{
+func (f testFixture) baseInput() teamrequests.CreateRequestInput {
+	return teamrequests.CreateRequestInput{
 		StudentID:            f.student.ID,
 		AgencyID:             f.agency.ID,
 		FacultySupervisorID:  f.faculty.ID,
 		AgencySupervisorID:   f.agencySup.ID,
+		FieldworkComponentID: f.component.ID,
 		FieldworkDescription: "Casework at a community clinic.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+		StartDate:            pgtype.Date{},
+	}
+}
+
+func TestCreateRequest_Success(t *testing.T) {
+	f := newFixture(t)
+	in := f.baseInput()
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	request, err := f.svc.CreateRequest(context.Background(), in)
 	if err != nil {
 		t.Fatalf("CreateRequest returned error: %v", err)
 	}
@@ -103,6 +125,9 @@ func TestCreateRequest_Success(t *testing.T) {
 	if request.AgencyDecision != sqlcgen.TeamRequestDecisionPending {
 		t.Errorf("AgencyDecision = %v, want pending", request.AgencyDecision)
 	}
+	if request.FieldworkComponentID != f.component.ID {
+		t.Errorf("FieldworkComponentID mismatch")
+	}
 }
 
 func TestCreateRequest_AgencyFromDifferentUniversityRejected(t *testing.T) {
@@ -110,14 +135,11 @@ func TestCreateRequest_AgencyFromDifferentUniversityRejected(t *testing.T) {
 	otherInstitution := testutil.CreateTestInstitution(t, f.queries)
 	otherAgency := testutil.CreateTestAgency(t, f.queries, otherInstitution.ID)
 
-	_, err := f.svc.CreateRequest(context.Background(), teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             otherAgency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Should be rejected.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	in := f.baseInput()
+	in.AgencyID = otherAgency.ID
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	_, err := f.svc.CreateRequest(context.Background(), in)
 	if !errors.Is(err, teamrequests.ErrAgencyWrongUniversity) {
 		t.Fatalf("error = %v, want ErrAgencyWrongUniversity", err)
 	}
@@ -128,14 +150,11 @@ func TestCreateRequest_AgencySupervisorFromDifferentAgencyRejected(t *testing.T)
 	otherAgency := testutil.CreateTestAgency(t, f.queries, f.institution.ID)
 	mismatchedSup := createScopedUser(t, f.queries, sqlcgen.UserRoleAgencySupervisor, pgtype.UUID{}, otherAgency.ID)
 
-	_, err := f.svc.CreateRequest(context.Background(), teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   mismatchedSup.ID,
-		FieldworkDescription: "Should be rejected.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	in := f.baseInput()
+	in.AgencySupervisorID = mismatchedSup.ID
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	_, err := f.svc.CreateRequest(context.Background(), in)
 	if !errors.Is(err, teamrequests.ErrAgencySupWrongAgency) {
 		t.Fatalf("error = %v, want ErrAgencySupWrongAgency", err)
 	}
@@ -145,31 +164,55 @@ func TestCreateRequest_StudentWithoutUniversityRejected(t *testing.T) {
 	f := newFixture(t)
 	homelessStudent := createScopedUser(t, f.queries, sqlcgen.UserRoleStudent, pgtype.UUID{}, pgtype.UUID{})
 
-	_, err := f.svc.CreateRequest(context.Background(), teamrequests.CreateRequestInput{
-		StudentID:            homelessStudent.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Should be rejected.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	in := f.baseInput()
+	in.StudentID = homelessStudent.ID
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	_, err := f.svc.CreateRequest(context.Background(), in)
 	if !errors.Is(err, teamrequests.ErrStudentHasNoUniversity) {
 		t.Fatalf("error = %v, want ErrStudentHasNoUniversity", err)
+	}
+}
+
+func TestCreateRequest_FieldworkComponentFromDifferentUniversityRejected(t *testing.T) {
+	f := newFixture(t)
+	otherInstitution := testutil.CreateTestInstitution(t, f.queries)
+	otherComponent := createFieldworkComponent(t, f.queries, otherInstitution.ID)
+
+	in := f.baseInput()
+	in.FieldworkComponentID = otherComponent.ID
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	_, err := f.svc.CreateRequest(context.Background(), in)
+	if !errors.Is(err, teamrequests.ErrFieldworkComponentWrongUniversity) {
+		t.Fatalf("error = %v, want ErrFieldworkComponentWrongUniversity", err)
+	}
+}
+
+func TestCreateRequest_UnknownFieldworkComponentRejected(t *testing.T) {
+	f := newFixture(t)
+	fakeID, err := db.ParseUUID("00000000-0000-0000-0000-000000000000")
+	if err != nil {
+		t.Fatalf("ParseUUID: %v", err)
+	}
+
+	in := f.baseInput()
+	in.FieldworkComponentID = fakeID
+	in.StartDate = parseDate(t, "2026-01-01")
+
+	_, err = f.svc.CreateRequest(context.Background(), in)
+	if !errors.Is(err, teamrequests.ErrFieldworkComponentNotFound) {
+		t.Fatalf("error = %v, want ErrFieldworkComponentNotFound", err)
 	}
 }
 
 func TestRespond_BothAcceptFormsTheTeam(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
+	in := f.baseInput()
+	in.StartDate = parseDate(t, "2026-01-01")
 
-	request, err := f.svc.CreateRequest(ctx, teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Casework.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	request, err := f.svc.CreateRequest(ctx, in)
 	if err != nil {
 		t.Fatalf("CreateRequest returned error: %v", err)
 	}
@@ -194,15 +237,10 @@ func TestRespond_BothAcceptFormsTheTeam(t *testing.T) {
 func TestRespond_OneRejectionDoesNotFormTeam(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
+	in := f.baseInput()
+	in.StartDate = parseDate(t, "2026-01-01")
 
-	request, err := f.svc.CreateRequest(ctx, teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Casework.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	request, err := f.svc.CreateRequest(ctx, in)
 	if err != nil {
 		t.Fatalf("CreateRequest returned error: %v", err)
 	}
@@ -223,15 +261,10 @@ func TestRespond_WrongSupervisorRejected(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	otherFaculty := createScopedUser(t, f.queries, sqlcgen.UserRoleFacultySupervisor, f.institution.ID, pgtype.UUID{})
+	in := f.baseInput()
+	in.StartDate = parseDate(t, "2026-01-01")
 
-	request, err := f.svc.CreateRequest(ctx, teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Casework.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	request, err := f.svc.CreateRequest(ctx, in)
 	if err != nil {
 		t.Fatalf("CreateRequest returned error: %v", err)
 	}
@@ -245,15 +278,10 @@ func TestRespond_WrongSupervisorRejected(t *testing.T) {
 func TestRespond_CannotDecideTwice(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
+	in := f.baseInput()
+	in.StartDate = parseDate(t, "2026-01-01")
 
-	request, err := f.svc.CreateRequest(ctx, teamrequests.CreateRequestInput{
-		StudentID:            f.student.ID,
-		AgencyID:             f.agency.ID,
-		FacultySupervisorID:  f.faculty.ID,
-		AgencySupervisorID:   f.agencySup.ID,
-		FieldworkDescription: "Casework.",
-		StartDate:            parseDate(t, "2026-01-01"),
-	})
+	request, err := f.svc.CreateRequest(ctx, in)
 	if err != nil {
 		t.Fatalf("CreateRequest returned error: %v", err)
 	}

@@ -16,6 +16,8 @@ import (
 	"github.com/fieldsync/backend/internal/auth"
 	"github.com/fieldsync/backend/internal/config"
 	"github.com/fieldsync/backend/internal/db/sqlcgen"
+	"github.com/fieldsync/backend/internal/feedback"
+	"github.com/fieldsync/backend/internal/fieldworkcomponents"
 	"github.com/fieldsync/backend/internal/institutions"
 	"github.com/fieldsync/backend/internal/practicums"
 	"github.com/fieldsync/backend/internal/reports"
@@ -48,6 +50,8 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 	users.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	institutions.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
 	agencies.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
+	fieldworkcomponents.NewHandler(queries).RegisterRoutes(r, cfg.JWTSecret)
+	feedback.NewHandler(feedback.NewService(queries)).RegisterRoutes(r, cfg.JWTSecret)
 
 	practicumsService := practicums.NewService(queries)
 	practicums.NewHandler(practicumsService).RegisterRoutes(r, cfg.JWTSecret)

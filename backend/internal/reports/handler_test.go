@@ -115,3 +115,57 @@ func TestFullReviewFlow_AgencyThenFaculty(t *testing.T) {
 		t.Errorf("report = %+v, want both statuses approved", me)
 	}
 }
+
+func TestResubmitFlow_RejectThenResubmitThenApprove(t *testing.T) {
+	r, f := newTestRouter(t)
+	studentToken := tokenFor(t, f.student)
+
+	submitRec := doJSON(t, r, http.MethodPost, "/consolidated-reports", studentToken, map[string]string{
+		"summary": "First draft.",
+	})
+	var created map[string]any
+	if err := json.Unmarshal(submitRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding submit response: %v", err)
+	}
+	reportID := created["id"].(string)
+
+	rejectRec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/agency-review", tokenFor(t, f.agencySup), map[string]string{"decision": "rejected"})
+	if rejectRec.Code != http.StatusOK {
+		t.Fatalf("reject status = %d, want %d; body = %s", rejectRec.Code, http.StatusOK, rejectRec.Body.String())
+	}
+
+	resubmitRec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/resubmit", studentToken, map[string]string{
+		"summary": "Revised draft.",
+	})
+	if resubmitRec.Code != http.StatusOK {
+		t.Fatalf("resubmit status = %d, want %d; body = %s", resubmitRec.Code, http.StatusOK, resubmitRec.Body.String())
+	}
+	var resubmitted map[string]any
+	if err := json.Unmarshal(resubmitRec.Body.Bytes(), &resubmitted); err != nil {
+		t.Fatalf("decoding resubmit response: %v", err)
+	}
+	if resubmitted["agencyStatus"] != "pending" {
+		t.Fatalf("agencyStatus = %v, want pending after resubmit", resubmitted["agencyStatus"])
+	}
+
+	approveRec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+reportID+"/agency-review", tokenFor(t, f.agencySup), map[string]string{"decision": "approved"})
+	if approveRec.Code != http.StatusOK {
+		t.Fatalf("post-resubmit approve status = %d, want %d; body = %s", approveRec.Code, http.StatusOK, approveRec.Body.String())
+	}
+}
+
+func TestResubmitHandler_RejectsBeforeAnyReview(t *testing.T) {
+	r, f := newTestRouter(t)
+	studentToken := tokenFor(t, f.student)
+
+	submitRec := doJSON(t, r, http.MethodPost, "/consolidated-reports", studentToken, map[string]string{"summary": "First draft."})
+	var created map[string]any
+	if err := json.Unmarshal(submitRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding submit response: %v", err)
+	}
+
+	rec := doJSON(t, r, http.MethodPost, "/consolidated-reports/"+created["id"].(string)+"/resubmit", studentToken, map[string]string{"summary": "Too early."})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+}

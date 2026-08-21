@@ -170,3 +170,52 @@ func TestListMine_ScopedToOwnInstitution(t *testing.T) {
 		t.Errorf("name = %v, want %v", results[0]["name"], nameA)
 	}
 }
+
+func TestUpdateAndDelete_UniversityControlOverOwnList(t *testing.T) {
+	r, queries := newTestRouter(t)
+	admin := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleAdministrator)
+	institution := testutil.CreateTestInstitution(t, queries)
+	adminToken := tokenFor(t, admin)
+
+	createRec := doJSON(t, r, http.MethodPost, "/agencies", adminToken, map[string]string{
+		"name":          fmt.Sprintf("Agency %d", time.Now().UnixNano()),
+		"institutionId": db.UUIDToString(institution.ID),
+	})
+	var created map[string]any
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding create response: %v", err)
+	}
+	id := created["id"].(string)
+
+	newName := fmt.Sprintf("Renamed Agency %d", time.Now().UnixNano())
+	updateRec := doJSON(t, r, http.MethodPatch, "/agencies/"+id, adminToken, map[string]string{"name": newName})
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want %d; body = %s", updateRec.Code, http.StatusOK, updateRec.Body.String())
+	}
+
+	deleteRec := doJSON(t, r, http.MethodDelete, "/agencies/"+id, adminToken, nil)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want %d; body = %s", deleteRec.Code, http.StatusNoContent, deleteRec.Body.String())
+	}
+}
+
+func TestUpdate_RequiresAdmin(t *testing.T) {
+	r, queries := newTestRouter(t)
+	admin := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleAdministrator)
+	supervisor := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleAgencySupervisor)
+	institution := testutil.CreateTestInstitution(t, queries)
+
+	createRec := doJSON(t, r, http.MethodPost, "/agencies", tokenFor(t, admin), map[string]string{
+		"name":          fmt.Sprintf("Agency %d", time.Now().UnixNano()),
+		"institutionId": db.UUIDToString(institution.ID),
+	})
+	var created map[string]any
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding create response: %v", err)
+	}
+
+	rec := doJSON(t, r, http.MethodPatch, "/agencies/"+created["id"].(string), tokenFor(t, supervisor), map[string]string{"name": "Hacked"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d (students/supervisors must not modify university-owned lists); body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}

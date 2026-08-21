@@ -17,20 +17,22 @@ import (
 )
 
 var (
-	ErrStudentNotFound        = errors.New("student not found")
-	ErrUserIsNotStudent       = errors.New("target user is not a student")
-	ErrStudentHasNoUniversity = errors.New("student is not associated with a university yet")
-	ErrAgencyNotFound         = errors.New("agency not found")
-	ErrAgencyWrongUniversity  = errors.New("agency does not belong to the student's university")
-	ErrFacultyNotFound        = errors.New("faculty supervisor not found")
-	ErrFacultyWrongRole       = errors.New("target user is not a faculty supervisor")
-	ErrFacultyWrongUniversity = errors.New("faculty supervisor does not belong to the student's university")
-	ErrAgencySupNotFound      = errors.New("agency supervisor not found")
-	ErrAgencySupWrongRole     = errors.New("target user is not an agency supervisor")
-	ErrAgencySupWrongAgency   = errors.New("agency supervisor does not belong to the selected agency")
-	ErrRequestNotFound        = errors.New("team request not found")
-	ErrNotYourRequest         = errors.New("this request was not sent to you")
-	ErrAlreadyDecided         = errors.New("you have already responded to this request")
+	ErrStudentNotFound                   = errors.New("student not found")
+	ErrUserIsNotStudent                  = errors.New("target user is not a student")
+	ErrStudentHasNoUniversity            = errors.New("student is not associated with a university yet")
+	ErrAgencyNotFound                    = errors.New("agency not found")
+	ErrAgencyWrongUniversity             = errors.New("agency does not belong to the student's university")
+	ErrFacultyNotFound                   = errors.New("faculty supervisor not found")
+	ErrFacultyWrongRole                  = errors.New("target user is not a faculty supervisor")
+	ErrFacultyWrongUniversity            = errors.New("faculty supervisor does not belong to the student's university")
+	ErrAgencySupNotFound                 = errors.New("agency supervisor not found")
+	ErrAgencySupWrongRole                = errors.New("target user is not an agency supervisor")
+	ErrAgencySupWrongAgency              = errors.New("agency supervisor does not belong to the selected agency")
+	ErrFieldworkComponentNotFound        = errors.New("fieldwork component not found")
+	ErrFieldworkComponentWrongUniversity = errors.New("fieldwork component does not belong to the student's university")
+	ErrRequestNotFound                   = errors.New("team request not found")
+	ErrNotYourRequest                    = errors.New("this request was not sent to you")
+	ErrAlreadyDecided                    = errors.New("you have already responded to this request")
 )
 
 type Service struct {
@@ -47,6 +49,7 @@ type CreateRequestInput struct {
 	AgencyID             pgtype.UUID
 	FacultySupervisorID  pgtype.UUID
 	AgencySupervisorID   pgtype.UUID
+	FieldworkComponentID pgtype.UUID
 	FieldworkDescription string
 	StartDate            pgtype.Date
 }
@@ -93,12 +96,21 @@ func (s *Service) CreateRequest(ctx context.Context, in CreateRequestInput) (sql
 		return sqlcgen.PracticumTeamRequest{}, ErrAgencySupWrongAgency
 	}
 
+	component, err := s.queries.GetFieldworkComponentByID(ctx, in.FieldworkComponentID)
+	if err != nil {
+		return sqlcgen.PracticumTeamRequest{}, ErrFieldworkComponentNotFound
+	}
+	if component.InstitutionID != student.InstitutionID {
+		return sqlcgen.PracticumTeamRequest{}, ErrFieldworkComponentWrongUniversity
+	}
+
 	return s.queries.CreateTeamRequest(ctx, sqlcgen.CreateTeamRequestParams{
 		StudentID:            in.StudentID,
 		InstitutionID:        student.InstitutionID,
 		AgencyID:             in.AgencyID,
 		FacultySupervisorID:  in.FacultySupervisorID,
 		AgencySupervisorID:   in.AgencySupervisorID,
+		FieldworkComponentID: in.FieldworkComponentID,
 		FieldworkDescription: in.FieldworkDescription,
 		StartDate:            in.StartDate,
 	})

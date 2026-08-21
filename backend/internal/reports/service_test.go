@@ -162,3 +162,67 @@ func TestGetForStudent_NotFound(t *testing.T) {
 		t.Fatalf("error = %v, want ErrReportNotFound", err)
 	}
 }
+
+func TestResubmit_RejectsWhenNotYetReviewed(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	report, err := f.svc.Submit(ctx, f.student.ID, "First submission.")
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	_, err = f.svc.Resubmit(ctx, report.ID, f.student.ID, "Trying to resubmit early.")
+	if !errors.Is(err, reports.ErrNotRejected) {
+		t.Fatalf("error = %v, want ErrNotRejected", err)
+	}
+}
+
+func TestResubmit_AfterRejectionGoesThroughApprovalAgain(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	report, err := f.svc.Submit(ctx, f.student.ID, "First submission.")
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+	if _, err := f.svc.AgencyReview(ctx, report.ID, f.agencySup.ID, false); err != nil {
+		t.Fatalf("AgencyReview returned error: %v", err)
+	}
+
+	resubmitted, err := f.svc.Resubmit(ctx, report.ID, f.student.ID, "Revised submission.")
+	if err != nil {
+		t.Fatalf("Resubmit returned error: %v", err)
+	}
+	if resubmitted.AgencyStatus != sqlcgen.ReviewDecisionPending {
+		t.Errorf("AgencyStatus = %v, want pending (must go through approval again)", resubmitted.AgencyStatus)
+	}
+	if resubmitted.Summary != "Revised submission." {
+		t.Errorf("Summary = %q, want the resubmitted text", resubmitted.Summary)
+	}
+
+	// The resubmitted report should now behave exactly like a fresh
+	// submission for review purposes.
+	if _, err := f.svc.AgencyReview(ctx, report.ID, f.agencySup.ID, true); err != nil {
+		t.Fatalf("AgencyReview after resubmit returned error: %v", err)
+	}
+}
+
+func TestResubmit_RejectsWrongStudent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	report, err := f.svc.Submit(ctx, f.student.ID, "First submission.")
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+	if _, err := f.svc.AgencyReview(ctx, report.ID, f.agencySup.ID, false); err != nil {
+		t.Fatalf("AgencyReview returned error: %v", err)
+	}
+
+	otherStudent := testutil.CreateTestUser(t, f.queries, sqlcgen.UserRoleStudent)
+	_, err = f.svc.Resubmit(ctx, report.ID, otherStudent.ID, "Should be rejected.")
+	if !errors.Is(err, reports.ErrNotYourReport) {
+		t.Fatalf("error = %v, want ErrNotYourReport", err)
+	}
+}

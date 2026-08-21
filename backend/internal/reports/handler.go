@@ -27,6 +27,7 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
 	r.GET("/consolidated-reports/pending", auth.RequireAuth(jwtSecret), auth.RequireRole("faculty_supervisor", "agency_supervisor"), h.listPending)
 	r.POST("/consolidated-reports/:id/agency-review", auth.RequireAuth(jwtSecret), auth.RequireRole("agency_supervisor"), h.agencyReview)
 	r.POST("/consolidated-reports/:id/faculty-review", auth.RequireAuth(jwtSecret), auth.RequireRole("faculty_supervisor"), h.facultyReview)
+	r.POST("/consolidated-reports/:id/resubmit", auth.RequireAuth(jwtSecret), auth.RequireRole("student"), h.resubmit)
 }
 
 type submitRequest struct {
@@ -81,6 +82,31 @@ func (h *Handler) getMine(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, toResponse(report))
+}
+
+func (h *Handler) resubmit(c *gin.Context) {
+	var req submitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	reportID, err := db.ParseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid report id"})
+		return
+	}
+	studentID, err := auth.CurrentUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	report, err := h.service.Resubmit(c.Request.Context(), reportID, studentID, req.Summary)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, toResponse(report))
 }
 
@@ -162,9 +188,9 @@ func respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrReportNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, ErrNotAssignedSupervisor):
+	case errors.Is(err, ErrNotAssignedSupervisor), errors.Is(err, ErrNotYourReport):
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
-	case errors.Is(err, ErrAgencyReviewFirst), errors.Is(err, ErrAlreadyReviewedByRole):
+	case errors.Is(err, ErrAgencyReviewFirst), errors.Is(err, ErrAlreadyReviewedByRole), errors.Is(err, ErrNotRejected):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "an unexpected error occurred"})

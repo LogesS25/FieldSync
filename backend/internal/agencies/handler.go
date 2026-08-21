@@ -31,6 +31,8 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
 	admin := r.Group("/agencies", auth.RequireAuth(jwtSecret), auth.RequireRole("administrator"))
 	admin.POST("", h.create)
 	admin.GET("", h.list)
+	admin.PATCH("/:id", h.update)
+	admin.DELETE("/:id", h.delete)
 
 	r.GET("/agencies/mine", auth.RequireAuth(jwtSecret), h.listMine)
 
@@ -123,6 +125,54 @@ func (h *Handler) listMine(c *gin.Context) {
 		response[i] = toResponse(ag)
 	}
 	c.JSON(http.StatusOK, response)
+}
+
+type updateAgencyRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+func (h *Handler) update(c *gin.Context) {
+	id, err := db.ParseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var req updateAgencyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	agency, err := h.queries.UpdateAgency(c.Request.Context(), sqlcgen.UpdateAgencyParams{ID: id, Name: req.Name})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			c.JSON(http.StatusConflict, gin.H{"error": "an agency with that name already exists"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not update agency"})
+		return
+	}
+	c.JSON(http.StatusOK, toResponse(agency))
+}
+
+func (h *Handler) delete(c *gin.Context) {
+	id, err := db.ParseUUID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	if err := h.queries.DeleteAgency(c.Request.Context(), id); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			c.JSON(http.StatusConflict, gin.H{"error": "this agency is referenced by existing practicum records and cannot be deleted"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not delete agency"})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func toResponse(agency sqlcgen.Agency) gin.H {

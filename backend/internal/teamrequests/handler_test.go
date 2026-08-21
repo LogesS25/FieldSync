@@ -37,6 +37,17 @@ func tokenFor(t *testing.T, user sqlcgen.User) string {
 	return token
 }
 
+func baseCreateBody(f testFixture) map[string]string {
+	return map[string]string{
+		"agencyId":             db.UUIDToString(f.agency.ID),
+		"facultySupervisorId":  db.UUIDToString(f.faculty.ID),
+		"agencySupervisorId":   db.UUIDToString(f.agencySup.ID),
+		"fieldworkComponentId": db.UUIDToString(f.component.ID),
+		"fieldworkDescription": "Casework at a community clinic.",
+		"startDate":            "2026-01-01",
+	}
+}
+
 func doJSON(t *testing.T, r *gin.Engine, method, path, bearerToken string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
@@ -58,13 +69,7 @@ func doJSON(t *testing.T, r *gin.Engine, method, path, bearerToken string, body 
 func TestCreateHandler_RequiresStudentRole(t *testing.T) {
 	r, f := newTestRouter(t)
 
-	rec := doJSON(t, r, http.MethodPost, "/team-requests", tokenFor(t, f.faculty), map[string]string{
-		"agencyId":             db.UUIDToString(f.agency.ID),
-		"facultySupervisorId":  db.UUIDToString(f.faculty.ID),
-		"agencySupervisorId":   db.UUIDToString(f.agencySup.ID),
-		"fieldworkDescription": "Casework.",
-		"startDate":            "2026-01-01",
-	})
+	rec := doJSON(t, r, http.MethodPost, "/team-requests", tokenFor(t, f.faculty), baseCreateBody(f))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
@@ -74,13 +79,7 @@ func TestFullTeamFormationFlow(t *testing.T) {
 	r, f := newTestRouter(t)
 	studentToken := tokenFor(t, f.student)
 
-	createRec := doJSON(t, r, http.MethodPost, "/team-requests", studentToken, map[string]string{
-		"agencyId":             db.UUIDToString(f.agency.ID),
-		"facultySupervisorId":  db.UUIDToString(f.faculty.ID),
-		"agencySupervisorId":   db.UUIDToString(f.agencySup.ID),
-		"fieldworkDescription": "Casework at a community clinic.",
-		"startDate":            "2026-01-01",
-	})
+	createRec := doJSON(t, r, http.MethodPost, "/team-requests", studentToken, baseCreateBody(f))
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body = %s", createRec.Code, http.StatusCreated, createRec.Body.String())
 	}
@@ -129,13 +128,7 @@ func TestFullTeamFormationFlow(t *testing.T) {
 func TestRespondHandler_RejectsInvalidDecision(t *testing.T) {
 	r, f := newTestRouter(t)
 
-	createRec := doJSON(t, r, http.MethodPost, "/team-requests", tokenFor(t, f.student), map[string]string{
-		"agencyId":             db.UUIDToString(f.agency.ID),
-		"facultySupervisorId":  db.UUIDToString(f.faculty.ID),
-		"agencySupervisorId":   db.UUIDToString(f.agencySup.ID),
-		"fieldworkDescription": "Casework.",
-		"startDate":            "2026-01-01",
-	})
+	createRec := doJSON(t, r, http.MethodPost, "/team-requests", tokenFor(t, f.student), baseCreateBody(f))
 	var created map[string]any
 	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decoding create response: %v", err)

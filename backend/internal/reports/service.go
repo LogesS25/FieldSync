@@ -20,6 +20,8 @@ var (
 	ErrAgencyReviewFirst     = errors.New("agency supervisor must approve before faculty review")
 	ErrReportNotFound        = errors.New("consolidated report not found")
 	ErrAlreadyReviewedByRole = errors.New("you have already reviewed this report")
+	ErrNotYourReport         = errors.New("this is not your report")
+	ErrNotRejected           = errors.New("only a rejected report can be resubmitted")
 )
 
 type Service struct {
@@ -50,6 +52,28 @@ func (s *Service) GetForStudent(ctx context.Context, studentID pgtype.UUID) (sql
 		return sqlcgen.ConsolidatedReport{}, ErrReportNotFound
 	}
 	return report, nil
+}
+
+// Resubmit implements the business requirements' "if rejected, the student
+// must resubmit; the resubmitted report goes through the approval process
+// again" (§13) — both review decisions reset to pending, not a fast-tracked
+// re-approval of the fixed content.
+func (s *Service) Resubmit(ctx context.Context, reportID, studentID pgtype.UUID, summary string) (sqlcgen.ConsolidatedReport, error) {
+	report, err := s.queries.GetConsolidatedReportByID(ctx, reportID)
+	if err != nil {
+		return sqlcgen.ConsolidatedReport{}, ErrReportNotFound
+	}
+	if report.StudentID != studentID {
+		return sqlcgen.ConsolidatedReport{}, ErrNotYourReport
+	}
+	if report.AgencyStatus != sqlcgen.ReviewDecisionRejected && report.FacultyStatus != sqlcgen.ReviewDecisionRejected {
+		return sqlcgen.ConsolidatedReport{}, ErrNotRejected
+	}
+
+	return s.queries.ResubmitConsolidatedReport(ctx, sqlcgen.ResubmitConsolidatedReportParams{
+		ID:      reportID,
+		Summary: summary,
+	})
 }
 
 func (s *Service) ListPendingForSupervisor(ctx context.Context, supervisorID pgtype.UUID) ([]sqlcgen.ConsolidatedReport, error) {

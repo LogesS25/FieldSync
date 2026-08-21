@@ -43,7 +43,18 @@ export default function StudentReports() {
     },
   });
 
+  const resubmitMutation = useMutation({
+    mutationFn: (values: ConsolidatedReportFormValues) =>
+      reportsService.resubmitConsolidatedReport(report!.id, values.summary),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consolidated-report', 'me'] });
+    },
+  });
+
   const onSubmit = handleSubmit((values) => mutation.mutate(values));
+  const onResubmit = handleSubmit((values) => resubmitMutation.mutate(values));
+
+  const isRejected = report && (report.agencyStatus === 'rejected' || report.facultyStatus === 'rejected');
 
   return (
     <ScreenContainer scroll>
@@ -54,13 +65,52 @@ export default function StudentReports() {
       </Text>
 
       {isLoading ? null : report ? (
-        <Card>
-          <View className="mb-3 flex-row gap-2">
-            <Badge label={`Agency: ${report.agencyStatus}`} tone={STATUS_TONE[report.agencyStatus]} />
-            <Badge label={`Faculty: ${report.facultyStatus}`} tone={STATUS_TONE[report.facultyStatus]} />
-          </View>
-          <Text className="text-sm text-slate-700">{report.summary}</Text>
-        </Card>
+        <View className="gap-4">
+          <Card>
+            <View className="mb-3 flex-row gap-2">
+              <Badge label={`Agency: ${report.agencyStatus}`} tone={STATUS_TONE[report.agencyStatus]} />
+              <Badge label={`Faculty: ${report.facultyStatus}`} tone={STATUS_TONE[report.facultyStatus]} />
+            </View>
+            <Text className="text-sm text-slate-700">{report.summary}</Text>
+          </Card>
+
+          {isRejected ? (
+            <Card>
+              <Text className="mb-1 text-base font-semibold text-slate-900">Resubmit Report</Text>
+              <Text className="mb-3 text-sm text-slate-500">
+                Your report was rejected. Update your summary and resubmit for review.
+              </Text>
+              <Controller
+                control={control}
+                name="summary"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <LabeledInput
+                    label="Summary"
+                    placeholder="Summarize your fieldwork for the whole period…"
+                    multiline
+                    numberOfLines={6}
+                    onBlur={onBlur}
+                    onChangeText={onChange}
+                    value={value}
+                    error={errors.summary?.message}
+                  />
+                )}
+              />
+              {resubmitMutation.isError ? (
+                <Text className="mb-2 text-sm text-red-600">
+                  {resubmitMutation.error instanceof ApiError
+                    ? resubmitMutation.error.message
+                    : 'Something went wrong. Please try again.'}
+                </Text>
+              ) : null}
+              <PrimaryButton
+                label={resubmitMutation.isPending ? 'Resubmitting…' : 'Resubmit Report'}
+                onPress={onResubmit}
+                disabled={resubmitMutation.isPending}
+              />
+            </Card>
+          ) : null}
+        </View>
       ) : (
         <Card>
           <Controller
