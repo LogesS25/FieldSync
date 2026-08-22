@@ -50,6 +50,22 @@ func doJSON(t *testing.T, r *gin.Engine, method, path, bearerToken string) *http
 	return rec
 }
 
+func doJSONBody(t *testing.T, r *gin.Engine, method, path, bearerToken string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(body); err != nil {
+		t.Fatalf("encoding request body: %v", err)
+	}
+	req := httptest.NewRequest(method, path, &buf)
+	req.Header.Set("Content-Type", "application/json")
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	return rec
+}
+
 func TestListHandler_ReturnsOwnNotifications(t *testing.T) {
 	r, queries, svc := newTestRouter(t)
 	user := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
@@ -82,6 +98,31 @@ func TestMarkReadHandler_RejectsOtherUser(t *testing.T) {
 	rec := doJSON(t, r, http.MethodPost, "/notifications/"+db.UUIDToString(n.ID)+"/read", tokenFor(t, other))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestRegisterAndUnregisterPushTokenHandlers(t *testing.T) {
+	r, queries, _ := newTestRouter(t)
+	user := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+	token := tokenFor(t, user)
+
+	registerRec := doJSONBody(t, r, http.MethodPost, "/push-tokens", token, map[string]string{"token": "expo-token-abc"})
+	if registerRec.Code != http.StatusNoContent {
+		t.Fatalf("register status = %d, want %d; body = %s", registerRec.Code, http.StatusNoContent, registerRec.Body.String())
+	}
+
+	unregisterRec := doJSONBody(t, r, http.MethodDelete, "/push-tokens", token, map[string]string{"token": "expo-token-abc"})
+	if unregisterRec.Code != http.StatusNoContent {
+		t.Fatalf("unregister status = %d, want %d; body = %s", unregisterRec.Code, http.StatusNoContent, unregisterRec.Body.String())
+	}
+}
+
+func TestRegisterPushTokenHandler_RequiresAuth(t *testing.T) {
+	r, _, _ := newTestRouter(t)
+
+	rec := doJSONBody(t, r, http.MethodPost, "/push-tokens", "", map[string]string{"token": "expo-token-abc"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
 }
 

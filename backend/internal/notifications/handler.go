@@ -25,6 +25,10 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtSecret string) {
 	group.GET("", h.list)
 	group.POST("/:id/read", h.markRead)
 	group.POST("/read-all", h.markAllRead)
+
+	pushTokens := r.Group("/push-tokens", auth.RequireAuth(jwtSecret))
+	pushTokens.POST("", h.registerPushToken)
+	pushTokens.DELETE("", h.unregisterPushToken)
 }
 
 func (h *Handler) list(c *gin.Context) {
@@ -83,6 +87,43 @@ func (h *Handler) markAllRead(c *gin.Context) {
 
 	if err := h.service.MarkAllRead(c.Request.Context(), userID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not mark notifications read"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+type pushTokenRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
+func (h *Handler) registerPushToken(c *gin.Context) {
+	var req pushTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	userID, err := auth.CurrentUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if _, err := h.service.RegisterPushToken(c.Request.Context(), userID, req.Token); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not register push token"})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h *Handler) unregisterPushToken(c *gin.Context) {
+	var req pushTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.UnregisterPushToken(c.Request.Context(), req.Token); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not unregister push token"})
 		return
 	}
 	c.Status(http.StatusNoContent)

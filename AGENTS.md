@@ -419,6 +419,51 @@ implementing real functionality is not exempt from this.
     setup — a separate, bigger step) and any missed-deadline/nudge alerting
     (that's a monitoring/compliance concern for Phase 8, not modeled here).
 
+- **Push notifications (2026-08-22)** — device delivery for the in-app
+  notifications above, so they reach a phone even when the app is closed.
+  Migration `0010`: `push_tokens` table (`user_id`, `token UNIQUE` — a
+  device re-registering, e.g. a different user logging in on a shared
+  device, reassigns the token via upsert rather than erroring).
+  - `internal/notifications` extended, not a new package: `Service.Create`
+    now also calls `dispatchPush` after the DB insert. **Concurrency
+    lesson, not just a design note**: the first version spawned a goroutine
+    that itself queried `*sqlcgen.Queries` for the recipient's tokens. That
+    query runs fine against the production connection pool, but every test
+    in the whole backend goes through `testutil.NewTestQueries`, which
+    wraps the test in a single shared `pgx.Tx` — not safe for concurrent
+    access from multiple goroutines. Fixed before it caused flaky tests
+    (not after): the token lookup happens synchronously on the caller's
+    connection; only the actual outbound HTTP call to Expo's push endpoint
+    (no DB access at all) is backgrounded. Rule of thumb for this codebase:
+    a goroutine spawned from a `Service` method must never touch
+    `s.queries` — hand it plain data instead.
+  - New routes: `POST /push-tokens` / `DELETE /push-tokens` (register/
+    unregister a device token for the caller). Sending itself
+    (`sendExpoPush`) POSTs to Expo's push API (`exp.host/--/api/v2/push/send`)
+    with a 10s timeout; failures are logged, never propagated — a
+    push-delivery problem must not fail (or even slow down) the request
+    that triggered the underlying notification.
+  - Full backend test coverage (5 new tests: upsert-reassigns-token,
+    unregister, register/unregister handlers, auth-required, and a test
+    that `Create` succeeds with zero registered tokens); verified live
+    end-to-end via curl including a real (if fake-token) call to Expo's
+    actual push endpoint, confirming the server stays healthy and the call
+    completes without blocking the triggering request.
+  - Mobile: `lib/push-notifications.ts` (`registerForPushNotificationsAsync`
+    — requests permission, resolves the Expo push token; returns `null`
+    rather than throwing on every failure path: no EAS project configured,
+    web, simulator, permission denied), `lib/use-push-registration.ts`
+    (registers once per sign-in, from the root layout), unregister wired
+    into `LogoutButton`. `npx tsc --noEmit`, `npm run lint`, and
+    `npx expo export --platform web` all clean.
+  - **This project has no EAS project yet** (confirmed with the user before
+    building this), so `registerForPushNotificationsAsync` currently always
+    returns `null` in practice — the code is fully wired and correct, but
+    won't produce a real, deliverable push token until a human runs `eas
+    login` (their own Expo account) and `eas init` from `mobile/`, which
+    writes `extra.eas.projectId` into `app.json`. In-app notifications work
+    regardless, with or without this step.
+
 ### In progress
 _(nothing currently)_
 
@@ -428,8 +473,6 @@ _(nothing currently)_
 - Evaluation marks (business requirements §14) — same blocking reason as
   Phase 6: criteria/scale/weightage are explicitly TBD, "do not invent
   these rules."
-- Push notifications — needs external Expo push service setup; in-app
-  notifications (above) cover the requirements-mandated triggers today.
 - Phase 8 — Reporting & Monitoring (Basic Requirement Checking, §16, is
   partially blocked too — the "required fieldwork hours" criterion needs
   the hours-calculation formula, which is explicitly TBD per §15; the

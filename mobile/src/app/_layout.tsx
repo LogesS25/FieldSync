@@ -4,8 +4,11 @@ import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppQueryProvider } from '@/lib/query-client';
+import { usePushRegistration } from '@/lib/use-push-registration';
 
 export default function RootLayout() {
+  usePushRegistration();
+
   return (
     // The (student)/(supervisor) Drawer navigators need a GestureHandlerRootView
     // ancestor for their swipe-to-open gesture and internal panning — without

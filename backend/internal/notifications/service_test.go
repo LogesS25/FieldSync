@@ -76,6 +76,74 @@ func TestMarkRead_Success(t *testing.T) {
 	}
 }
 
+func TestRegisterPushToken_UpsertReassignsToNewUser(t *testing.T) {
+	queries := testutil.NewTestQueries(t)
+	svc := notifications.NewService(queries)
+	ctx := context.Background()
+	userA := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+	userB := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+
+	if _, err := svc.RegisterPushToken(ctx, userA.ID, "device-token-1"); err != nil {
+		t.Fatalf("RegisterPushToken(userA): %v", err)
+	}
+	// Same device, different user (e.g. someone logged out and a different
+	// user logged in) — should reassign, not error.
+	if _, err := svc.RegisterPushToken(ctx, userB.ID, "device-token-1"); err != nil {
+		t.Fatalf("RegisterPushToken(userB): %v", err)
+	}
+
+	tokens, err := queries.ListPushTokensForUser(ctx, userB.ID)
+	if err != nil {
+		t.Fatalf("ListPushTokensForUser: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("len(tokens) for userB = %d, want 1", len(tokens))
+	}
+
+	tokensA, err := queries.ListPushTokensForUser(ctx, userA.ID)
+	if err != nil {
+		t.Fatalf("ListPushTokensForUser: %v", err)
+	}
+	if len(tokensA) != 0 {
+		t.Fatalf("len(tokens) for userA = %d, want 0 (reassigned away)", len(tokensA))
+	}
+}
+
+func TestUnregisterPushToken(t *testing.T) {
+	queries := testutil.NewTestQueries(t)
+	svc := notifications.NewService(queries)
+	ctx := context.Background()
+	user := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+
+	if _, err := svc.RegisterPushToken(ctx, user.ID, "device-token-2"); err != nil {
+		t.Fatalf("RegisterPushToken: %v", err)
+	}
+	if err := svc.UnregisterPushToken(ctx, "device-token-2"); err != nil {
+		t.Fatalf("UnregisterPushToken: %v", err)
+	}
+
+	tokens, err := queries.ListPushTokensForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListPushTokensForUser: %v", err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("len(tokens) = %d, want 0 after unregister", len(tokens))
+	}
+}
+
+func TestCreate_NoPushTokensRegisteredIsNotAnError(t *testing.T) {
+	queries := testutil.NewTestQueries(t)
+	svc := notifications.NewService(queries)
+	ctx := context.Background()
+	user := testutil.CreateTestUser(t, queries, sqlcgen.UserRoleStudent)
+
+	// No push token registered for this user — Create must still succeed
+	// (the push dispatch is a silent no-op, not an error).
+	if _, err := svc.Create(ctx, user.ID, "hello"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+}
+
 func TestMarkAllRead(t *testing.T) {
 	queries := testutil.NewTestQueries(t)
 	svc := notifications.NewService(queries)

@@ -11,6 +11,11 @@
 // "kind" enum) so the mobile client needs no per-type rendering logic —
 // kept deliberately simple for a first pass; add a kind/icon column later
 // if the UI needs to differentiate visually.
+//
+// Every Create also fires an Expo push notification (see push.go) to any
+// device tokens registered for the recipient — fire-and-forget, since a
+// push-delivery failure must never block the in-app notification or the
+// business action that triggered it.
 package notifications
 
 import (
@@ -40,10 +45,17 @@ func NewService(queries *sqlcgen.Queries) *Service {
 // triggered it. Callers log and swallow the error rather than propagating
 // it — see call sites.
 func (s *Service) Create(ctx context.Context, recipientID pgtype.UUID, message string) (sqlcgen.Notification, error) {
-	return s.queries.CreateNotification(ctx, sqlcgen.CreateNotificationParams{
+	notification, err := s.queries.CreateNotification(ctx, sqlcgen.CreateNotificationParams{
 		RecipientID: recipientID,
 		Message:     message,
 	})
+	if err != nil {
+		return sqlcgen.Notification{}, err
+	}
+
+	s.dispatchPush(ctx, recipientID, message)
+
+	return notification, nil
 }
 
 func (s *Service) ListForUser(ctx context.Context, userID pgtype.UUID) ([]sqlcgen.Notification, error) {

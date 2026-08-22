@@ -12,10 +12,14 @@ interface AuthState {
   // the root layout can hold navigation instead of flashing the login
   // screen for an already-authenticated user.
   hasHydrated: boolean;
+  // Deliberately not persisted (see partialize below) — re-registered each
+  // app start so a stale token never lingers past a reinstall/device change.
+  pushToken: string | null;
   setSession: (user: AuthUser, accessToken: string, refreshToken: string) => void;
   setAccessToken: (accessToken: string) => void;
   clearSession: () => void;
   setHasHydrated: (value: boolean) => void;
+  setPushToken: (token: string | null) => void;
 }
 
 // zustand's persist middleware runs hydration synchronously as part of the
@@ -34,10 +38,12 @@ export const useAuthStore = create<AuthState>()(
         accessToken: null,
         refreshToken: null,
         hasHydrated: false,
+        pushToken: null,
         setSession: (user, accessToken, refreshToken) => set({ user, accessToken, refreshToken }),
         setAccessToken: (accessToken) => set({ accessToken }),
         clearSession: () => set({ user: null, accessToken: null, refreshToken: null }),
         setHasHydrated: (value) => set({ hasHydrated: value }),
+        setPushToken: (token) => set({ pushToken: token }),
       };
     },
     {

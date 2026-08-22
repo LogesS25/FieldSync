@@ -35,6 +35,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "cde4f11c-ac20-4df2-a607-92046d2c4fae"
+      }
+    },
+    "owner": "loges_s"
   }
 }
